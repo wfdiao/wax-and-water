@@ -19,6 +19,8 @@ English | [简体中文](README.zh-CN.md)
   <img src="media/three-objects-demo.gif" width="92%" alt="Wax and Water: three silhouettes moving through one procedural water-effects engine" />
   <br>
   <em>One shared engine, three tuned object profiles: geometry-aware shedding, dynamic drag, and distinct bubble wakes.</em>
+  <br><br>
+  <a href="https://youtu.be/GfNf6GMqlhY">Watch the full demo on YouTube →</a>
 </p>
 
 ---

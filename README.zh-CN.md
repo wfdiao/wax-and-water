@@ -19,6 +19,7 @@
   <img src="media/three-objects-demo.gif" width="92%" alt="Wax and Water：三种物体共用一套程序化水体效果引擎" />
   <br>
   <em>三种物体共用同一套程序，只是各自调好了参数：气泡会根据轮廓脱落，阻力会随运动变化，最后留下各自不同的尾迹。</em>
+    <a href="https://youtu.be/GfNf6GMqlhY">在 YouTube 观看完整演示 →</a>
 </p>
 
 ---
