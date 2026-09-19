@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+*.log
+scratch/
+.chrome-data/
+node_modules/
+
+# Local source material and export tooling
+media/raw/
+media/archive/
+media/*.mp3
+media/*.mp4
+export_gifs.mjs
+export_video.mjs

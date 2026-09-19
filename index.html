@@ -1,0 +1,1719 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Wax and Water · Into the Crayon Sea</title>
+<meta name="description" content="A zero-dependency Canvas 2D experiment that turns picture-book observations into runtime-generated underwater motion.">
+<meta property="og:title" content="Wax and Water · Into the Crayon Sea">
+<meta property="og:description" content="Picture-book water effects shaped in real time by motion, geometry, and particle density.">
+<meta property="og:image" content="media/og-preview.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<script src="crayon.js"></script>
+<style>
+  html,body{background:#245d7a;margin:0;padding:0;width:100%;height:100%;overflow:hidden;touch-action:none}
+  canvas.stage{display:block;position:absolute;top:0;left:0;width:100%;height:100%}
+</style>
+</head>
+<body>
+
+<!-- Top-Right Floating Controls & Switcher -->
+<div class="cr-top-bar" id="topBar">
+  <div id="objSwitchers" style="display:flex;align-items:center;gap:12px"></div>
+  <button class="cr-solid-btn" id="langToggle" title="Switch Language / 切换中英文">中 / EN</button>
+  <button class="cr-solid-btn cr-solid-icon-btn" id="panelToggle" title="控制面板 (C)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
+      <line x1="4" y1="21" x2="4" y2="14"></line>
+      <line x1="4" y1="10" x2="4" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="12"></line>
+      <line x1="12" y1="8" x2="12" y2="3"></line>
+      <line x1="20" y1="21" x2="20" y2="16"></line>
+      <line x1="20" y1="12" x2="20" y2="3"></line>
+      <line x1="1" y1="14" x2="7" y2="14"></line>
+      <line x1="9" y1="8" x2="15" y2="8"></line>
+      <line x1="17" y1="16" x2="23" y2="16"></line>
+    </svg>
+  </button>
+</div>
+
+<!-- Main Canvas -->
+<canvas class="stage" id="stage"></canvas>
+
+<!-- Bottom Shortcut Hint Bar -->
+<div class="cr-bottom-bar" id="bottomBar">
+  <span class="cr-status-badge" id="pausedBadge">⏸ PAUSED</span>
+  <div id="hintDesktop" class="cr-hint-desktop"></div>
+  <div id="hintMobile" class="cr-hint-mobile">
+    <div id="hintMobilePoised" class="cr-mobile-poised visible">
+      <span id="hintMobileText" class="cr-mobile-text"></span>
+    </div>
+    <div id="hintMobileDropped" class="cr-mobile-dropped">
+      <button class="cr-mobile-reset-btn" id="mobileResetBtn" type="button">Reset</button>
+      <span id="hintMobileOrSelect" class="cr-mobile-or-text"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+Crayon.injectCSS()
+
+// ==========================================
+// 1. 三种物体的物理与视觉定义 (3 Physical Objects)
+// ==========================================
+const OUTLINES = {
+  mask: [[0.4896,0.0,0.996,0.087],[0.4854,0.0319,0.996,0.087],[0.484,0.0639,0.953,0.303],[0.466,0.0931,0.937,0.349],[0.4618,0.1236,0.991,0.132],[0.4576,0.1556,0.989,0.15],[0.4521,0.1875,0.989,0.147],[0.4479,0.2208,0.995,0.1],[0.4451,0.2569,0.991,0.133],[0.4382,0.2931,0.978,0.207],[0.4299,0.3292,0.941,0.339],[0.4132,0.3625,0.883,0.47],[0.3951,0.3944,0.788,0.615],[0.3688,0.4194,0.659,0.753],[0.3396,0.4431,0.514,0.857],[0.3063,0.4569,0.417,0.909],[0.2729,0.4736,0.401,0.916],[0.2396,0.4861,0.31,0.951],[0.2049,0.4958,0.038,0.999],[0.166,0.4889,-0.129,0.992],[0.1299,0.4861,-0.277,0.961],[0.0938,0.4681,-0.753,0.659],[0.0521,0.3972,-0.829,0.56],[0.0243,0.3653,-0.925,0.38],[0.0007,0.2722,-0.908,0.419],[-0.0174,0.275,0.147,0.989],[-0.0368,0.2778,0.074,0.997],[-0.0549,0.2778,-0.115,0.993],[-0.0729,0.2736,-0.26,0.966],[-0.091,0.2681,0.371,0.928],[-0.1215,0.2931,0.473,0.881],[-0.1479,0.2986,0.057,0.998],[-0.1701,0.2958,-0.055,0.998],[-0.1979,0.2958,-0.105,0.995],[-0.2229,0.2903,-0.211,0.977],[-0.2493,0.2847,-0.248,0.969],[-0.2771,0.2764,-0.253,0.967],[-0.3076,0.2694,-0.437,0.899],[-0.3285,0.2514,-0.628,0.778],[-0.3507,0.2347,-0.669,0.743],[-0.3701,0.2139,-0.84,0.543],[-0.3813,0.1875,-0.938,0.346],[-0.3896,0.1611,-0.879,0.477],[-0.4076,0.1389,-0.857,0.514],[-0.4188,0.1125,-0.885,0.466],[-0.4354,0.0861,-0.651,0.759],[-0.4771,0.0625,-0.735,0.678],[-0.4854,0.0319,-0.985,0.175],[-0.4882,0.0,-0.996,0.087],[-0.491,-0.0319,-0.991,-0.132],[-0.4799,-0.0625,-0.807,-0.591],[-0.4493,-0.0889,-0.547,-0.837],[-0.4076,-0.1097,-0.385,-0.923],[-0.366,-0.1236,-0.479,-0.878],[-0.3465,-0.1431,-0.757,-0.653],[-0.3312,-0.1639,-0.666,-0.746],[-0.3076,-0.1778,-0.488,-0.873],[-0.284,-0.1903,-0.362,-0.932],[-0.2576,-0.1972,-0.23,-0.973],[-0.2313,-0.2028,-0.217,-0.976],[-0.2076,-0.2083,-0.214,-0.977],[-0.1868,-0.2125,-0.235,-0.972],[-0.1674,-0.2181,-0.17,-0.985],[-0.1465,-0.2194,-0.071,-0.997],[-0.1285,-0.2208,-0.074,-0.997],[-0.109,-0.2222,0.0,-1.0],[-0.091,-0.2208,-0.042,-0.999],[-0.0757,-0.2236,-0.043,-0.999],[-0.059,-0.2222,0.0,-1.0],[-0.0438,-0.2236,-0.048,-0.999],[-0.0299,-0.2236,-0.048,-0.999],[-0.0146,-0.225,-0.048,-0.999],[-0.0007,-0.225,0.0,-1.0],[0.0146,-0.225,0.045,-0.999],[0.0299,-0.2236,0.048,-0.999],[0.0438,-0.2236,0.048,-0.999],[0.059,-0.2222,0.087,-0.996],[0.0757,-0.2208,0.043,-0.999],[0.091,-0.2208,0.043,-0.999],[0.1076,-0.2194,0.119,-0.993],[0.1257,-0.2167,-0.761,-0.649],[0.2924,-0.4361,-0.739,-0.673],[0.3799,-0.4958,-0.313,-0.95],[0.4188,-0.4778,0.732,-0.681],[0.4354,-0.4361,0.932,-0.363],[0.4507,-0.3958,0.917,-0.4],[0.4688,-0.3597,0.932,-0.362],[0.4799,-0.3208,0.979,-0.206],[0.4854,-0.2806,0.998,-0.068],[0.4854,-0.2389,0.999,0.034],[0.4826,-0.2,0.998,0.055],[0.4813,-0.1639,0.999,0.039],[0.4799,-0.1292,1.0,0.02],[0.4799,-0.0958,0.999,0.042],[0.4771,-0.0625,0.985,-0.171],[0.491,-0.0319,0.981,-0.196]],
+  camera: [[0.3824,-0.0014,0.707,-0.707],[0.4104,0.0266,0.876,-0.482],[0.4132,0.0546,0.999,0.053],[0.4076,0.0798,0.988,0.156],[0.4048,0.1078,0.967,0.254],[0.3936,0.1331,0.894,0.447],[0.3796,0.1583,0.894,0.447],[0.3683,0.1835,0.932,0.362],[0.3599,0.2087,0.872,0.49],[0.3431,0.2283,0.625,0.781],[0.3179,0.2423,0.824,0.567],[0.3123,0.2731,0.944,0.33],[0.2983,0.2983,0.912,0.41],[0.2871,0.3291,0.853,0.521],[0.2675,0.3487,0.6,0.8],[0.2423,0.3627,0.447,0.894],[0.2171,0.3739,0.095,0.995],[0.1835,0.3683,-0.204,0.979],[0.1499,0.3599,-0.179,0.984],[0.1218,0.3571,-0.196,0.981],[0.0938,0.3487,-0.254,0.967],[0.0686,0.3431,-0.316,0.949],[0.0434,0.3319,-0.333,0.943],[0.021,0.3263,-0.196,0.981],[0.0014,0.3235,-0.196,0.981],[-0.021,0.3179,-0.258,0.966],[-0.0406,0.3123,-0.21,0.978],[-0.0602,0.3095,-0.196,0.981],[-0.0826,0.3039,-0.258,0.966],[-0.1022,0.2983,-0.336,0.942],[-0.1218,0.2899,-0.275,0.962],[-0.1415,0.2871,-0.132,0.991],[-0.1639,0.2843,-0.258,0.966],[-0.1835,0.2759,-0.316,0.949],[-0.2059,0.2703,-0.282,0.959],[-0.2311,0.2619,-0.268,0.964],[-0.2563,0.2563,-0.268,0.964],[-0.2815,0.2479,-0.346,0.938],[-0.3095,0.2367,-0.371,0.928],[-0.3375,0.2255,-0.6,0.8],[-0.3543,0.2031,-0.884,0.468],[-0.3627,0.1779,-0.905,0.426],[-0.3768,0.1555,-0.905,0.426],[-0.3852,0.1303,-0.988,0.156],[-0.3852,0.1022,-0.995,-0.1],[-0.3796,0.0742,-0.998,-0.055],[-0.3824,0.0518,-0.998,-0.055],[-0.3768,0.0238,-0.986,-0.164],[-0.3739,0.0014,-0.998,-0.059],[-0.3739,-0.0238,-0.986,-0.164],[-0.3655,-0.049,-1.0,-0.0],[-0.3739,-0.0742,-0.938,0.346],[-0.3852,-0.1022,-0.999,0.053],[-0.3768,-0.1275,-0.949,-0.316],[-0.3683,-0.1527,-0.964,-0.268],[-0.3627,-0.1779,-0.872,-0.49],[-0.3431,-0.1975,-0.394,-0.919],[-0.3039,-0.2031,-0.371,-0.928],[-0.2871,-0.2199,-0.49,-0.872],[-0.2591,-0.2283,-0.381,-0.925],[-0.2395,-0.2395,-0.906,-0.423],[-0.2395,-0.2703,-0.925,-0.381],[-0.2199,-0.2871,-0.471,-0.882],[-0.1975,-0.2927,-0.164,-0.986],[-0.1695,-0.2955,0.0,-1.0],[-0.1443,-0.2927,0.117,-0.993],[-0.1218,-0.2899,0.707,-0.707],[-0.077,-0.2255,0.737,-0.676],[-0.0602,-0.2227,0.0,-1.0],[-0.0462,-0.2255,-0.625,-0.781],[-0.0322,-0.2451,-0.832,-0.555],[-0.0182,-0.2675,-0.707,-0.707],[-0.0014,-0.2759,-0.225,-0.974],[0.0182,-0.2759,0.0,-1.0],[0.035,-0.2759,0.077,-0.997],[0.0546,-0.2731,0.225,-0.974],[0.0714,-0.2675,0.316,-0.949],[0.0882,-0.2619,0.225,-0.974],[0.1078,-0.2591,0.225,-0.974],[0.1246,-0.2535,0.316,-0.949],[0.1415,-0.2479,0.447,-0.894],[0.1583,-0.2367,0.774,-0.633],[0.1667,-0.2171,0.985,-0.174],[0.1667,-0.1891,0.998,-0.059],[0.1695,-0.1695,0.857,-0.514],[0.1835,-0.1611,0.385,-0.923],[0.2031,-0.1555,-0.124,-0.992],[0.2507,-0.1695,-0.071,-0.997],[0.2815,-0.1611,0.426,-0.905],[0.2983,-0.1471,0.852,-0.524],[0.3039,-0.1246,0.919,-0.394],[0.3151,-0.1078,0.793,-0.61],[0.3319,-0.0882,0.814,-0.581],[0.3431,-0.0686,0.882,-0.471],[0.3543,-0.0462,0.936,-0.351],[0.3599,-0.0238,0.848,-0.53]],
+  crayon: [[0.1166,0.0,1.0,-0.0],[0.1166,0.0076,0.998,-0.055],[0.1174,0.0151,0.999,-0.053],[0.1174,0.0235,0.999,0.053],[0.1166,0.031,0.999,0.053],[0.1166,0.0394,1.0,-0.0],[0.1166,0.0478,1.0,-0.0],[0.1166,0.057,1.0,-0.0],[0.1166,0.0671,0.999,0.04],[0.1158,0.078,1.0,-0.0],[0.1166,0.0898,0.999,-0.034],[0.1166,0.1023,1.0,-0.0],[0.1166,0.1166,1.0,0.028],[0.1158,0.1326,1.0,0.024],[0.1158,0.151,1.0,-0.02],[0.1166,0.1745,1.0,-0.016],[0.1166,0.203,1.0,-0.0],[0.1166,0.2374,1.0,0.011],[0.1158,0.2802,0.993,0.115],[0.1074,0.3171,0.947,0.32],[0.0931,0.3473,0.897,0.443],[0.0755,0.3817,0.894,0.447],[0.0554,0.4228,0.902,0.431],[0.031,0.4748,0.797,0.604],[0.0,0.4958,0.054,0.999],[-0.031,0.4782,-0.782,0.624],[-0.0562,0.4253,-0.899,0.437],[-0.0763,0.3851,-0.9,0.435],[-0.0931,0.349,-0.899,0.438],[-0.1082,0.3196,-0.943,0.334],[-0.1166,0.2827,-0.992,0.127],[-0.1183,0.2408,-1.0,0.022],[-0.1183,0.2047,-1.0,-0.0],[-0.1183,0.177,-1.0,-0.016],[-0.1174,0.1527,-1.0,-0.02],[-0.1174,0.1342,-1.0,-0.0],[-0.1174,0.1174,-1.0,-0.0],[-0.1174,0.1032,-1.0,-0.0],[-0.1174,0.0906,-1.0,-0.0],[-0.1174,0.078,-1.0,-0.0],[-0.1174,0.068,-1.0,-0.0],[-0.1174,0.0579,-1.0,-0.0],[-0.1174,0.0487,-0.999,0.048],[-0.1183,0.0403,-0.999,0.05],[-0.1183,0.0319,-1.0,-0.0],[-0.1183,0.0235,-1.0,-0.0],[-0.1183,0.0159,-1.0,-0.0],[-0.1183,0.0076,-1.0,-0.0],[-0.1183,0.0,-1.0,-0.0],[-0.1183,-0.0076,-1.0,-0.0],[-0.1183,-0.0159,-1.0,-0.0],[-0.1183,-0.0235,-1.0,-0.0],[-0.1183,-0.0319,-1.0,-0.0],[-0.1183,-0.0403,-1.0,-0.0],[-0.1183,-0.0495,-1.0,-0.0],[-0.1183,-0.0587,-0.999,-0.045],[-0.1174,-0.068,-0.999,0.04],[-0.1191,-0.0797,-0.997,0.071],[-0.1191,-0.0914,-1.0,-0.0],[-0.1191,-0.1049,-1.0,-0.0],[-0.1191,-0.1191,-1.0,-0.0],[-0.1191,-0.1359,-1.0,-0.0],[-0.1191,-0.156,-1.0,-0.0],[-0.1191,-0.1779,-1.0,0.016],[-0.12,-0.2081,-1.0,0.013],[-0.12,-0.2441,-1.0,0.01],[-0.1208,-0.2919,-1.0,0.015],[-0.1216,-0.3591,-1.0,0.005],[-0.1216,-0.4547,-0.983,-0.186],[-0.0973,-0.4874,-0.574,-0.819],[-0.0654,-0.4941,-0.129,-0.992],[-0.0327,-0.4958,-0.038,-0.999],[0.0,-0.4966,0.0,-1.0],[0.0327,-0.4958,0.026,-1.0],[0.0654,-0.495,0.143,-0.99],[0.0965,-0.4866,0.611,-0.791],[0.1208,-0.4522,0.983,-0.184],[0.1208,-0.3565,1.0,0.005],[0.12,-0.2894,1.0,0.015],[0.1191,-0.2416,1.0,0.01],[0.1191,-0.2064,1.0,0.013],[0.1183,-0.177,1.0,0.016],[0.1183,-0.1535,1.0,-0.0],[0.1183,-0.1351,1.0,-0.0],[0.1183,-0.1183,1.0,-0.0],[0.1183,-0.104,1.0,0.03],[0.1174,-0.0906,1.0,-0.0],[0.1183,-0.0789,1.0,-0.0],[0.1174,-0.068,0.999,0.04],[0.1174,-0.0579,1.0,-0.0],[0.1174,-0.0487,0.999,0.045],[0.1166,-0.0394,0.999,0.048],[0.1166,-0.031,0.999,-0.053],[0.1174,-0.0235,0.999,-0.053],[0.1174,-0.0151,0.999,0.053],[0.1166,-0.0076,0.998,0.055]]
+}
+OUTLINES.goggle = OUTLINES.mask
+
+const PRIMARY_OBJECTS = ['mask', 'camera', 'crayon']
+
+const OBJECT_DEFS = {
+  mask: {
+    id: 'mask',
+    icon: '🤿',
+    name: { zh: '潜水面镜', en: 'Dive Mask' },
+    src: 'assets/paper-goggle.png',
+    size: 316,
+    noseOffset: 0.225,
+    terminal: 320,
+    buoy: 0.5,
+    torque: 12,
+    baseAir: 80,
+    airTau: 1.4,
+    cloudCount: 40,
+    cloudR: 17,
+    frothCount: 52,
+    frothR: 24,
+    hasSnorkel: true,
+    snorkelAir: 28,
+    outline: OUTLINES.mask
+  },
+  camera: {
+    id: 'camera',
+    icon: '📷',
+    name: { zh: '水下相机', en: 'Camera' },
+    src: 'assets/camera.png',
+    size: 168,
+    noseOffset: 0.15,
+    terminal: 400,
+    buoy: 0.44,
+    torque: 14,
+    baseAir: 32,
+    airTau: 1.0,
+    cloudCount: 18,
+    cloudR: 10,
+    frothCount: 24,
+    frothR: 15,
+    hasSnorkel: false,
+    snorkelAir: 0,
+    outline: OUTLINES.camera
+  },
+  crayon: {
+    id: 'crayon',
+    icon: '✏️',
+    name: { zh: '细长蜡笔', en: 'Crayon' },
+    src: 'assets/paper-crayon.png',
+    size: 100,
+    noseOffset: 0.45,
+    terminal: 460,
+    buoy: 0.36,
+    torque: 4,
+    baseAir: 12,
+    airTau: 0.6,
+    cloudCount: 8,
+    cloudR: 6,
+    frothCount: 10,
+    frothR: 8,
+    hasSnorkel: false,
+    snorkelAir: 0,
+    outline: OUTLINES.crayon
+  }
+}
+
+// 兼容旧参数与别名 (Backward-compatible alias)
+OBJECT_DEFS.goggle = OBJECT_DEFS.mask
+
+let activeObjId = 'mask'
+let activeObj = OBJECT_DEFS.mask
+
+// ==========================================
+// 2. 国际化字典 (i18n Dictionaries)
+// ==========================================
+const I18N = {
+  zh: {
+    panelTitle: '参数调节 (C)',
+    replayBtn: '回到原来状态 (Space)',
+    copyShareBtn: '🔗 复制当前参数链接',
+    shareCopied: '已复制分享链接到剪贴板！',
+    paused: '⏸ 已暂停',
+    hintPlayDrop: '点击物体下落',
+    hintDragDrop: '选择高度',
+    hintReset: '回到原来状态',
+    hintPause: '暂停',
+    hintPanel: '控制面板',
+    hintMobile: '点击物体下落 · 拖拽选择高度',
+    hintMobilePoised: '点击物体下落 · 拖拽选择高度',
+    hintMobileOrSelect: '或选择其他物体下落',
+    secPhysics: '物理与相机',
+    terminal: '水中终端速度',
+    buoy: '浮力比',
+    torque: '入水扭矩',
+    camera: '相机跟随',
+    pause: '暂停 (P)',
+    secFroth: '水面泡沫云',
+    froth: '颗数',
+    frothR: '泡沫大小 (基准半径)',
+    frothRVar: '大小差异 (0=均一)',
+    spreadRate: '扩散速度 (1秒走多远)',
+    spreadPow: '减速程度 (1=匀速)',
+    frothLife: '泡沫寿命 s',
+    frothEdge: '边缘先破',
+    secRipple: '水面涟漪',
+    ringCount: '圈数',
+    ringScale: '半径 (相对泡沫扩散)',
+    ringMax: '最大半径',
+    ringStagger: '每圈延迟 s',
+    ringArc: '弧长 (1=整圈)',
+    ringGap: '断口占比',
+    ringLife: '涟漪寿命 s',
+    ringA: '浓度',
+    ringW: '线宽',
+    ringFade: '越外越淡',
+    secCloud: '入水气团',
+    cloud: '颗数',
+    cloudTau: '气团 τ s',
+    cloudR: '气团泡泡大小',
+    secBeads: '串珠尾迹',
+    airTotal: '空气预算 (基础颗数)',
+    airTau: '放气 τ s',
+    entrain: '泡泡带走的速度',
+    tau: '泡泡减速 τ s',
+    rise: '上浮速度',
+    beadR: '串珠半径',
+    densN: '几个邻居算「挤」',
+    tauFix: 'τ 弛豫修复 (F)',
+    secSnorkel: '呼吸管咕嘟',
+    snorkel: '预算 (颗)',
+    glug: '咕嘟间隔 s',
+    secSwoosh: '侧锋与湍流',
+    swooshW: '侧锋宽',
+    swooshA: '侧锋浓',
+    swooshLife: '侧锋寿命 s',
+    tufts: '湍流乱涂',
+    secWater: '水体排线与没入',
+    hatch: '水体排线',
+    wash: '没入 wash α',
+    secPaper: '纸纹',
+    grain: '纸纹强度'
+  },
+  en: {
+    panelTitle: 'Parameters (C)',
+    replayBtn: 'Reset to Start (Space)',
+    copyShareBtn: '🔗 Copy Shareable Link',
+    shareCopied: 'Configuration link copied to clipboard!',
+    paused: '⏸ PAUSED',
+    hintPlayDrop: 'Click object to drop',
+    hintDragDrop: 'to adjust height',
+    hintReset: 'Reset to start',
+    hintPause: 'Pause',
+    hintPanel: 'Controls',
+    hintMobile: 'Tap object to drop · Drag to adjust height',
+    hintMobilePoised: 'Tap object to drop · Drag to adjust height',
+    hintMobileOrSelect: 'or select other object to drop',
+    secPhysics: 'Physics & Camera',
+    terminal: 'Terminal Velocity',
+    buoy: 'Buoyancy Ratio',
+    torque: 'Entry Torque',
+    camera: 'Camera Follow',
+    pause: 'Pause (P)',
+    secFroth: 'Surface Froth Cloud',
+    froth: 'Froth Count',
+    frothR: 'Base Radius',
+    frothRVar: 'Size Variance',
+    spreadRate: 'Spread Speed',
+    spreadPow: 'Deceleration (1=const)',
+    frothLife: 'Lifespan (s)',
+    frothEdge: 'Edge Break First',
+    secRipple: 'Surface Ripples',
+    ringCount: 'Ring Count',
+    ringScale: 'Radius (rel. to froth)',
+    ringMax: 'Max Radius',
+    ringStagger: 'Ring Delay (s)',
+    ringArc: 'Arc Span (1=full)',
+    ringGap: 'Gap Ratio',
+    ringLife: 'Lifespan (s)',
+    ringA: 'Opacity',
+    ringW: 'Line Width',
+    ringFade: 'Outer Fade',
+    secCloud: 'Plunge Air Cloud',
+    cloud: 'Bubble Count',
+    cloudTau: 'Cloud Decay τ (s)',
+    cloudR: 'Bubble Size',
+    secBeads: 'Trailing Bead Wake',
+    airTotal: 'Air Budget (Base count)',
+    airTau: 'Release τ (s)',
+    entrain: 'Velocity Entrainment',
+    tau: 'Bubble Decel τ (s)',
+    rise: 'Rise Velocity',
+    beadR: 'Bead Radius',
+    densN: 'Cluster Threshold (Disc)',
+    tauFix: 'τ Relaxation Fix (F)',
+    secSnorkel: 'Snorkel Glug',
+    snorkel: 'Air Budget',
+    glug: 'Glug Interval (s)',
+    secSwoosh: 'Scumble & Turbulence',
+    swooshW: 'Scumble Width',
+    swooshA: 'Scumble Opacity',
+    swooshLife: 'Scumble Lifespan (s)',
+    tufts: 'Turbulent Hatching',
+    secWater: 'Water Hatching & Wash',
+    hatch: 'Water Hatching',
+    wash: 'Front Wash Alpha',
+    secPaper: 'Paper Grain',
+    grain: 'Grain Strength'
+  }
+}
+
+let currentLang = localStorage.getItem('crayon_dive_lang') || localStorage.getItem('goggle_sink_lang') || 'zh'
+
+// ==========================================
+// 3. 世界常数与参数面板 (World & Parameters)
+// ==========================================
+let WW = 1000, WH = 700
+let WORLD_H = 1700
+let WATER = 400
+const GRAVITY = 9.81 * 175
+const CAMERA_DELAY = 1.2, CAMERA_DURATION = 2.6
+const smooth = v => { const t = Crayon.clamp(v, 0, 1); return t * t * (3 - 2 * t) }
+function waterHeight(x, t) { return WATER + Math.sin(x * .011 + t * 1.3) * 6 + Math.sin(x * .023 - t * .9) * 3 }
+
+const P = Crayon.panel([
+  { id: 'physics', title: I18N[currentLang].secPhysics, params: {
+    terminal:   { label: I18N[currentLang].terminal, min: 120, max: 900, step: 10, value: activeObj.terminal },
+    buoy:       { label: I18N[currentLang].buoy, min: 0, max: 1, step: .05, value: activeObj.buoy },
+    torque:     { label: I18N[currentLang].torque, min: 0, max: 30, step: 1, value: activeObj.torque },
+    camera:     { label: I18N[currentLang].camera, type: 'check', value: true },
+    pause:      { label: I18N[currentLang].pause, type: 'check', value: false },
+  } },
+  { id: 'froth', title: I18N[currentLang].secFroth, toggle: 'showFroth', params: {
+    froth:        { label: I18N[currentLang].froth, min: 0, max: 120, step: 1, value: activeObj.frothCount },
+    frothR:       { label: I18N[currentLang].frothR, min: 4, max: 60, step: 1, value: activeObj.frothR },
+    frothRVar:    { label: I18N[currentLang].frothRVar, min: 0, max: .8, step: .05, value: .4 },
+    spreadRate:   { label: I18N[currentLang].spreadRate, min: 0, max: 500, step: 10, value: 160 },
+    spreadPow:    { label: I18N[currentLang].spreadPow, min: .2, max: 1, step: .05, value: .5 },
+    frothLife:    { label: I18N[currentLang].frothLife, min: .4, max: 6, step: .1, value: 2.4 },
+    frothEdge:    { label: I18N[currentLang].frothEdge, min: 0, max: 1, step: .05, value: .55 },
+  } },
+  { id: 'ripple', title: I18N[currentLang].secRipple, toggle: 'showRipple', on: true, params: {
+    ringCount:   { label: I18N[currentLang].ringCount, min: 1, max: 6, step: 1, value: 3 },
+    ringScale:   { label: I18N[currentLang].ringScale, min: .2, max: 2, step: .05, value: 1.6 },
+    ringMax:     { label: I18N[currentLang].ringMax, min: 40, max: 400, step: 10, value: 320 },
+    ringStagger: { label: I18N[currentLang].ringStagger, min: 0, max: .5, step: .02, value: .12 },
+    ringArc:     { label: I18N[currentLang].ringArc, min: .1, max: 1, step: .05, value: .55 },
+    ringGap:     { label: I18N[currentLang].ringGap, min: 0, max: .6, step: .04, value: .28 },
+    ringLife:    { label: I18N[currentLang].ringLife, min: .5, max: 5, step: .1, value: 3.5 },
+    ringA:       { label: I18N[currentLang].ringA, min: 0, max: 1, step: .02, value: .6 },
+    ringW:       { label: I18N[currentLang].ringW, min: .5, max: 5, step: .1, value: 1.8 },
+    ringFade:    { label: I18N[currentLang].ringFade, min: 0, max: 1, step: .05, value: .5 },
+  } },
+  { id: 'cloud', title: I18N[currentLang].secCloud, toggle: 'showCloud', params: {
+    cloud:      { label: I18N[currentLang].cloud, min: 0, max: 80, step: 1, value: activeObj.cloudCount },
+    cloudTau:   { label: I18N[currentLang].cloudTau, min: .2, max: 4, step: .1, value: activeObj.airTau * .45 },
+    cloudR:     { label: I18N[currentLang].cloudR, min: 3, max: 40, step: 1, value: activeObj.cloudR },
+  } },
+  { id: 'beads', title: I18N[currentLang].secBeads, toggle: 'showBeads', params: {
+    airTotal:   { label: I18N[currentLang].airTotal, min: 0, max: 300, step: 5, value: activeObj.baseAir },
+    airTau:     { label: I18N[currentLang].airTau, min: .2, max: 5, step: .1, value: activeObj.airTau },
+    entrain:    { label: I18N[currentLang].entrain, min: 0, max: 1, step: .05, value: .55 },
+    tau:        { label: I18N[currentLang].tau, min: .05, max: 1.5, step: .05, value: .4 },
+    rise:       { label: I18N[currentLang].rise, min: 20, max: 200, step: 5, value: 75 },
+    beadR:      { label: I18N[currentLang].beadR, min: 2, max: 16, step: .5, value: 9 },
+    densN:      { label: I18N[currentLang].densN, min: 1, max: 10, step: 1, value: 3 },
+    tauFix:     { label: I18N[currentLang].tauFix, type: 'check', value: true },
+  } },
+  { id: 'snorkel', title: I18N[currentLang].secSnorkel, toggle: 'showSnorkel', params: {
+    snorkel:    { label: I18N[currentLang].snorkel, min: 0, max: 80, step: 1, value: activeObj.snorkelAir },
+    glug:       { label: I18N[currentLang].glug, min: .1, max: 1.5, step: .05, value: .35 },
+  } },
+  { id: 'swoosh', title: I18N[currentLang].secSwoosh, toggle: 'showSwoosh', params: {
+    swooshW:    { label: I18N[currentLang].swooshW, min: 0, max: 100, step: 1, value: 46 },
+    swooshA:    { label: I18N[currentLang].swooshA, min: 0, max: .6, step: .01, value: .28 },
+    swooshLife: { label: I18N[currentLang].swooshLife, min: .3, max: 6, step: .1, value: 2.4 },
+    tufts:      { label: I18N[currentLang].tufts, min: 0, max: 1, step: .05, value: .4 },
+  } },
+  { id: 'water', title: I18N[currentLang].secWater, toggle: 'showWater', params: {
+    hatch:      { label: I18N[currentLang].hatch, min: 0, max: 1, step: .05, value: .5 },
+    wash:       { label: I18N[currentLang].wash, min: 0, max: .8, step: .01, value: .43 },
+  } },
+  { id: 'paper', title: I18N[currentLang].secPaper, params: {
+    grain:      { label: I18N[currentLang].grain, min: 0, max: 1, step: .02, value: .58 },
+  } },
+], k => {
+  if (k === 'hatch' || k === 'grain' || k === 'showWater') bakeBg()
+  if (k === 'pause') updatePauseUI(P.pause)
+}, {
+  title: I18N[currentLang].panelTitle,
+  buttons: [
+    [I18N[currentLang].replayBtn, () => replay(), 'cr-btn-primary'],
+    [I18N[currentLang].copyShareBtn, () => copyShareLink()]
+  ]
+})
+
+// ==========================================
+// 4. 画布与离屏图层 (Canvas & Layers)
+// ==========================================
+const cv = document.getElementById('stage'), ctx = cv.getContext('2d')
+let S = 1, dpr = devicePixelRatio, SW, SH
+let layers, bgCanvas
+let currentSprite = new Image()
+let currentOutline = []
+
+function loadActiveSprite() {
+  currentSprite = new Image()
+  currentSprite.src = activeObj.src
+  currentOutline = activeObj.outline.map(([lx, ly, nx, ny]) => ({
+    lx: lx * activeObj.size,
+    ly: ly * activeObj.size,
+    nx, ny
+  }))
+  currentSprite.onload = () => {
+    try {
+      currentOutline = traceOutline(currentSprite, activeObj.size)
+    } catch (e) {
+      // Running under file:// fallback to precomputed outline
+    }
+    draw()
+  }
+}
+
+function traceOutline(img, size) {
+  const N = 96, c = document.createElement('canvas'); c.width = img.width; c.height = img.height
+  const g2 = c.getContext('2d'); g2.drawImage(img, 0, 0)
+  const a = g2.getImageData(0, 0, c.width, c.height).data, cx = c.width / 2, cy = c.height / 2
+  const pts = []
+  for (let i = 0; i < N; i++) {
+    const th = i / N * Math.PI * 2, dx = Math.cos(th), dy = Math.sin(th)
+    let last = null
+    for (let r = 0; r < c.width; r += 2) {
+      const x = Math.round(cx + dx * r), y = Math.round(cy + dy * r)
+      if (x < 0 || y < 0 || x >= c.width || y >= c.height) break
+      if (a[(y * c.width + x) * 4 + 3] > 60) last = { x, y }
+    }
+    if (last) pts.push(last)
+  }
+  const k = size / img.height
+  return pts.map((p, i) => {
+    const q = pts[(i + 1) % pts.length], o = pts[(i - 1 + pts.length) % pts.length]
+    let tx = q.x - o.x, ty = q.y - o.y; const L = Math.hypot(tx, ty) || 1; tx /= L; ty /= L
+    let nx = ty, ny = -tx
+    if ((p.x - cx) * nx + (p.y - cy) * ny < 0) { nx = -nx; ny = -ny }
+    return { lx: (p.x - cx) * k, ly: (p.y - cy) * k, nx, ny }
+  })
+}
+
+function shedPoint() {
+  if (!currentOutline.length) return { x: g.x, y: g.y, nx: 0, ny: -1 }
+  const spd = Math.hypot(g.vx, g.vy) || 1, dx = g.vx / spd, dy = g.vy / spd
+  const c = Math.cos(g.angle), sn = Math.sin(g.angle)
+  const w = currentOutline.map(o => {
+    const nx = o.nx * c - o.ny * sn, ny = o.nx * sn + o.ny * c
+    const along = nx * dx + ny * dy
+    return Math.pow(Math.max(0, -along), 1.5) + .35 * (1 - Math.abs(along))
+  })
+  let t = R() * w.reduce((a, b) => a + b, 0), i = 0
+  while (i < w.length - 1 && (t -= w[i]) > 0) i++
+  const o = currentOutline[i], nx = o.nx * c - o.ny * sn, ny = o.nx * sn + o.ny * c
+  return { x: g.x + o.lx * c - o.ly * sn, y: g.y + o.lx * sn + o.ly * c, nx, ny }
+}
+
+// ==========================================
+// 5. 模拟与物理循环 (Simulation Loop)
+// ==========================================
+let R = Crayon.rng(1)
+let g, T, camera = 0, contact = null, path = [], bubbles = [], froth = [], drops = [], dragging = false, isPoised = true
+let frothX0 = 0, frothHalf = 165
+const T0 = .05
+
+function expansion(wet) {
+  const t = Math.max(0, wet)
+  return P.spreadRate * (Math.pow(t + T0, P.spreadPow) - Math.pow(T0, P.spreadPow))
+}
+
+function replay(seed = activeObj ? activeObj.seed : 1) {
+  R = Crayon.rng(seed); T = 0; camera = 0; contact = null
+  path = []; bubbles = []; froth = []; drops = []
+  isPoised = true
+  dragging = false
+  g = {
+    x: WW * 0.5, y: Math.round(WH * 0.42), vx: 0, vy: 0,
+    angle: activeObj.id === 'crayon' ? 0.02 : -0.08,
+    av: 0, air: 0, releaseT: 0, hover: 0,
+    snorkelAir: 0, glugT: 0
+  }
+  if (typeof updateHintBar === 'function') updateHintBar()
+}
+
+function resize(customW, customH) {
+  const cssW = customW || window.innerWidth
+  const cssH = customH || window.innerHeight
+  dpr = Math.min(window.devicePixelRatio || 1, 2)
+
+  // 动态屏幕适配标度 s (每个世界单位对应的屏幕 CSS 像素)
+  let s
+  if (cssW < 600) {
+    // 竖屏手机：自适应宽度，确保物体在画面中占比约 50%，周围留出适宜的落水与水花空间
+    s = Math.max(0.48, Math.min(0.72, cssW / 580))
+  } else if (cssW < cssH) {
+    // 平板竖屏
+    s = Math.max(0.65, Math.min(1.05, cssW / 750))
+  } else {
+    // 宽屏桌面/笔记本：同时考量宽高比
+    s = Math.max(0.75, Math.min(1.3, Math.min(cssW / 1100, cssH / 720)))
+  }
+
+  S = s * dpr
+  WW = cssW / s
+  WH = cssH / s
+  SW = Math.round(cssW * dpr)
+  SH = Math.round(cssH * dpr)
+
+  // 水面高度定位：初始视口中天空占 2/3 (约 67%)，海洋占 1/3 (约 33%)
+  WATER = Math.round(WH * (2 / 3))
+  WORLD_H = Math.round(WATER + Math.max(1400, WH * 1.5))
+
+  cv.width = SW
+  cv.height = SH
+  cv.style.width = cssW + 'px'
+  cv.style.height = cssH + 'px'
+
+  layers = [
+    new Crayon.Layer(SW, SH, { name: 'tufts', grain: .55, blend: 'multiply' }),
+    new Crayon.Layer(SW, SH, { name: 'swoosh', grain: .6 }),
+    new Crayon.Layer(SW, SH, { name: 'back-chalk', grain: .42 }),
+    new Crayon.Layer(SW, SH, { name: 'back-pencil', grain: .62 }),
+    new Crayon.Layer(SW, SH, { name: 'front-chalk', grain: .42 }),
+    new Crayon.Layer(SW, SH, { name: 'front-pencil', grain: .62 }),
+    new Crayon.Layer(SW, SH, { name: 'inverse', grain: .45, blend: 'multiply' }),
+  ]
+
+  if (isPoised && g) {
+    g.x = WW * 0.5
+    g.y = Math.round(WH * 0.42)
+  }
+
+  bakeBg()
+}
+
+function bakeBg() {
+  bgCanvas = document.createElement('canvas'); bgCanvas.width = SW; bgCanvas.height = Math.round(WORLD_H * S)
+  const b = bgCanvas.getContext('2d'), Rb = Crayon.rng(7)
+  b.fillStyle = '#dcecf5'; b.fillRect(0, 0, SW, WATER * S)
+  const grad = b.createLinearGradient(0, WATER * S, 0, WORLD_H * S)
+  grad.addColorStop(0, '#008ff2'); grad.addColorStop(.35, '#007cd0'); grad.addColorStop(1, '#005896')
+  b.fillStyle = grad; b.fillRect(0, WATER * S, SW, (WORLD_H - WATER) * S)
+  if (P.hatch > 0 && P.showWater) {
+    const hl = new Crayon.Layer(SW, bgCanvas.height, { grain: .5, blend: 'multiply' })
+    const n = Math.round(WW / 6 * P.hatch * 1.6)
+    for (let i = 0; i < n; i++) {
+      const x = Rb() * WW, y0 = WATER + 40 + Rb() * (WORLD_H - WATER - 40), len = 60 + Rb() * 220
+      Crayon.hatch(hl.ctx, x * S, y0 * S, Math.PI / 2 + (Rb() - .5) * .06, len * S, {
+        width: (2 + Rb() * 3) * S, color: 'rgb(30,80,120)', alpha: .06 + Rb() * .16, seed: i, bend: .05, swell: 1.4
+      })
+    }
+    hl.composite(b)
+  }
+}
+
+function emit(x, y, r, o) {
+  bubbles.push(Object.assign({
+    x, y, r, vx: 0, vy: 0, age: 0, seed: R() * 1000, alpha: 1, kind: 'disc', layer: 'front', phase: R() * 7, tau: P.tau
+  }, o))
+}
+
+function local(lx, ly) {
+  const c = Math.cos(g.angle), s = Math.sin(g.angle)
+  return { x: g.x + lx * c - ly * s, y: g.y + lx * s + ly * c }
+}
+
+function snorkelTop() {
+  return local(.4 * activeObj.size, -.42 * activeObj.size)
+}
+
+function step(dt) {
+  T += dt
+  if (isPoised) {
+    g.vx = 0; g.vy = 0; g.av = 0; camera = 0
+    return
+  }
+  if (dragging) return
+
+  const nose = g.y + activeObj.noseOffset * activeObj.size
+  const immersion = Crayon.clamp((nose - waterHeight(g.x, T)) / 65, 0, 1)
+
+  if (immersion > 0 && contact === null) {
+    contact = T
+    const wy = waterHeight(g.x, T)
+    frothX0 = g.x; frothHalf = activeObj.id === 'crayon' ? 45 : 165
+
+    // 动态空气预算：入水冲击速度决定带入空气量与气团尺寸
+    // 基准速度取 550 (约自由落体 100px)。贴水松手 (~150) -> 0.25；顶端高空落下 (~1100) -> 2.2
+    const impactSpeed = Math.hypot(g.vx, g.vy) || 550
+    const speedFactor = Crayon.clamp(Math.pow(impactSpeed / 550, 1.3), 0.2, 2.5)
+
+    // 空气预算直接随速度大范围缩放
+    const actualAir = Math.round(P.airTotal * speedFactor)
+    g.air = actualAir
+    g.snorkelAir = activeObj.hasSnorkel ? Math.round(P.snorkel * speedFactor) : 0
+    g.glugT = .15
+
+    // 水面泡沫云宽度与颗粒数量、大小均随速度强烈联动！
+    const baseHalf = activeObj.id === 'crayon' ? 25 : (activeObj.id === 'camera' ? 75 : 165)
+    frothHalf = baseHalf * Crayon.clamp(Math.sqrt(speedFactor), 0.5, 1.8)
+
+    const fCount = Math.round(P.froth * speedFactor)
+    const dynamicFrothR = P.frothR * Crayon.clamp(Math.sqrt(speedFactor), 0.6, 1.5)
+    for (let i = 0; i < fCount; i++) {
+      const u0 = (R() - .5) * 2
+      froth.push({
+        u0, x: g.x + u0 * frothHalf, y: wy + (R() - .35) * (35 * speedFactor),
+        r: dynamicFrothR * (1 - P.frothRVar + R() * P.frothRVar * 2), age: 0, seed: R() * 100, inv: R() < .6,
+        life: Math.max(.15, P.frothLife * (1 - P.frothEdge * Math.abs(u0)) * (.55 + R() * .9))
+      })
+    }
+
+    // 水下气团数量与深浅：高空落下气团冲得更深、范围更宽
+    const cCount = Math.round(P.cloud * speedFactor)
+    const dynamicCloudR = P.cloudR * Crayon.clamp(Math.sqrt(speedFactor), 0.6, 1.4)
+    for (let i = 0; i < cCount; i++) {
+      emit(g.x + (R() - .5) * (frothHalf * 1.2), nose + (R() - .5) * (40 * speedFactor), dynamicCloudR * (.7 + R() * .6), {
+        vx: g.vx * .9 + (R() - .5) * (120 * speedFactor),
+        vy: g.vy * (.7 + R() * .35),
+        tau: P.cloudTau * Crayon.clamp(speedFactor, 0.7, 1.4),
+        layer: 'back', src: 'cloud'
+      })
+    }
+
+    // 飞溅水花滴数与射出速度：低空几乎无飞溅，高空剧烈飞溅！
+    const dropN = Math.round(10 * Math.pow(speedFactor, 1.4))
+    for (let i = 0; i < dropN; i++) {
+      drops.push({
+        x: g.x + (R() - .5) * (frothHalf * .9), y: wy,
+        vx: (R() - .5) * (180 * speedFactor), vy: -(100 + R() * 260) * speedFactor,
+        age: 0, seed: R() * 50
+      })
+    }
+  }
+
+  const wet = contact === null ? 0 : T - contact
+  const settle = smooth((wet - CAMERA_DELAY) / CAMERA_DURATION)
+  const current = Math.sin(T * 1.4) * 6
+  const buoyancy = immersion * GRAVITY * P.buoy
+  const linearDrag = .45
+  const netGravity = GRAVITY * (1 - P.buoy)
+  const quad = Math.max(0, (netGravity - linearDrag * P.terminal) / (P.terminal * P.terminal))
+  const impactDrag = .5 * .0015 * Math.exp(-wet / .12)
+  const resistance = immersion * (linearDrag * g.vy + (quad + impactDrag) * g.vy * Math.abs(g.vy))
+
+  g.hover = settle
+  g.vy += (GRAVITY * (1 - immersion * P.buoy * (1 + g.hover)) - resistance) * dt
+  if (g.hover > 0) g.vy *= Math.exp(-g.hover * 3 * dt)
+  g.vx += ((current - g.vx) * immersion * 3 - g.angle * immersion * 240 + (WW * 0.5 - g.x) * settle * 2) * dt
+
+  const entryTorque = contact === null ? 0 : P.torque * Math.exp(-wet / .10)
+  const torque = immersion * (-g.angle * 42 + entryTorque)
+  g.av += (torque - g.av * (.25 + immersion * 4)) * dt
+  g.x += g.vx * dt; g.y += g.vy * dt; g.angle += g.av * dt
+
+  if (g.hover > .99) {
+    g.y += Math.sin(T * 1.1) * .25
+    g.angle += Math.sin(T * .85) * .0004
+  }
+
+  // 空气预算释放
+  if (contact !== null && g.air > 0) {
+    const rate = P.airTotal / P.airTau * Math.exp(-wet / P.airTau)
+    g.releaseT += rate * dt
+    while (g.releaseT >= 1 && g.air > 0) {
+      g.releaseT -= 1; g.air -= 1
+      const p = shedPoint()
+      const left = g.air / P.airTotal
+      const r = P.beadR * (1 + (R() - .5)) * (.55 + .45 * left)
+      emit(p.x + p.nx * 5, p.y + p.ny * 5, r, {
+        vx: g.vx * P.entrain + p.nx * 25 + (R() - .5) * (25 + 50 * (1 - left)),
+        vy: g.vy * P.entrain + p.ny * 25,
+        layer: 'front', src: 'bead'
+      })
+    }
+  }
+
+  // 呼吸管咕嘟（仅潜水镜具有）
+  if (activeObj.hasSnorkel && contact !== null && g.snorkelAir > 0) {
+    g.glugT -= dt
+    if (g.glugT <= 0) {
+      g.glugT = P.glug * (.7 + R() * .6)
+      const n = Math.min(g.snorkelAir, 3 + Math.floor(R() * 3))
+      const p = snorkelTop()
+      for (let i = 0; i < n; i++) {
+        emit(p.x + (R() - .5) * 14, p.y + (R() - .5) * 14, 9 + R() * 6, {
+          vx: g.vx * .4 + (R() - .5) * 40, vy: g.vy * .4, tau: .3, layer: 'front', src: 'snorkel'
+        })
+      }
+      g.snorkelAir -= n
+    }
+  }
+
+  // 局部密度计算
+  for (const b of bubbles) {
+    let n = 0
+    for (const c of bubbles) {
+      if (c !== b && Math.abs(c.x - b.x) < 40 && Math.abs(c.y - b.y) < 40 && Math.hypot(b.x - c.x, b.y - c.y) < (b.r + c.r) * 1.5) n++
+    }
+    b.k = (b.k ?? 1) + (((n >= P.densN) ? 1 : 0) - (b.k ?? 1)) * Math.min(1, dt * 3)
+  }
+
+  // 路径记录
+  if (contact !== null) {
+    const spd = Math.hypot(g.vx, g.vy), last = path[path.length - 1]
+    if (spd > 60 && (!last || Math.hypot(last.x - g.x, last.y - g.y) > 16)) {
+      path.push({ x: g.x, y: g.y + (activeObj.noseOffset * activeObj.size) * .3, t: T, w: Crayon.clamp(spd / 500, 0, 1), seed: R() * 100 })
+    }
+  }
+
+  // 泡泡动力学
+  for (const b of bubbles) {
+    b.age += dt
+    const k = Math.exp(-dt / b.tau)
+    const rise = P.rise * Math.sqrt(Math.max(.3, b.r / 7))
+    b.vx *= k
+    if (P.tauFix) {
+      b.vy = -rise + (b.vy + rise) * k
+    } else {
+      b.vy *= k
+      b.vy += (-rise - b.vy) * Math.min(1, dt * 1.6)
+    }
+    if (b.r > 6 || b.kind === 'ring') b.vx += Math.sin(T * 6 + b.phase) * 14 * dt * 6
+    b.vx += (R() - .5) * 30 * dt * 8
+    b.x += b.vx * dt; b.y += b.vy * dt
+    if (b.y < waterHeight(b.x, T) + b.r * 1.5) b.alpha -= dt * 2.5
+  }
+  for (let i = bubbles.length - 1; i >= 0; i--) if (bubbles[i].alpha <= 0) bubbles.splice(i, 1)
+
+  // 泡沫云扩散
+  {
+    const spread = expansion(contact === null ? 0 : T - contact)
+    for (const f of froth) {
+      f.age += dt
+      f.x = frothX0 + f.u0 * (frothHalf + spread)
+    }
+    for (let i = froth.length - 1; i >= 0; i--) if (froth[i].age > froth[i].life) froth.splice(i, 1)
+  }
+
+  for (const d of drops) { d.age += dt; d.vy += GRAVITY * .9 * dt; d.x += d.vx * dt; d.y += d.vy * dt }
+  for (let i = drops.length - 1; i >= 0; i--) if (drops[i].y > waterHeight(drops[i].x, T) + 4 || drops[i].age > 1.2) drops.splice(i, 1)
+  while (path.length && T - path[0].t > P.swooshLife) path.shift()
+
+  // 相机跟随
+  const follow = contact === null ? 0 : smooth(wet / .34)
+  const targetScreenY = (WATER * 0.5) + (WH * 0.5 - WATER * 0.5) * follow
+  const target = P.camera && contact !== null ? Crayon.clamp(g.y - targetScreenY, 0, Math.max(0, WORLD_H - WH)) : 0
+  camera += (target - camera) * Math.min(1, dt * 8)
+}
+
+function jumpTo(wetTarget) {
+  replay()
+  isPoised = false
+  let guard = 0
+  while ((contact === null || T - contact < wetTarget) && guard++ < 4000) step(1 / 120)
+  P.pause = true; P.__sync('pause', true)
+  updatePauseUI(true)
+  updateHintBar()
+}
+
+// ==========================================
+// 6. 渲染管线 (Render Pipeline)
+// ==========================================
+const wx = x => x * S, wy = y => (y - camera) * S
+
+function draw() {
+  const [tuftL, swooshL, bChalk, bPencil, fChalk, fPencil, invL] = layers
+  for (const l of layers) {
+    if (l.name.includes('pencil') || l.name.includes('swoosh')) l.grainStrength = P.grain
+    else if (l.name.includes('chalk')) l.grainStrength = P.grain * .75
+  }
+  layers.forEach(l => l.clear())
+  ctx.drawImage(bgCanvas, 0, -camera * S)
+
+  // 水面横向手绘线
+  ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2 * S; ctx.beginPath()
+  for (let x = 0; x <= WW; x += 8) { const y = waterHeight(x, T); x ? ctx.lineTo(wx(x), wy(y)) : ctx.moveTo(wx(x), wy(y)) }
+  ctx.stroke(); ctx.restore()
+
+  // 侧锋与湍流
+  if (P.showSwoosh) for (let i = 1; i < path.length; i++) {
+    const p0 = path[i - 1], p1 = path[i], life = Crayon.clamp(1 - (T - p1.t) / P.swooshLife, 0, 1)
+    if (life <= 0) continue
+    const dx = p1.x - p0.x, dy = p1.y - p0.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, nx = -uy, ny = ux
+    const Rs = Crayon.rng(p1.seed * 1000)
+    if (Rs() < .55) {
+      const side = Rs() < .5 ? 1 : -1, off = side * (P.swooshW * (.5 + Rs() * .6)), len = 60 + Rs() * 110
+      const cx = p1.x + nx * off, cy = p1.y + ny * off, tilt = (Rs() - .5) * .5
+      const ax = Math.cos(Math.atan2(uy, ux) + tilt), ay = Math.sin(Math.atan2(uy, ux) + tilt)
+      const pts = []
+      for (let k = 0; k <= 5; k++) {
+        const u = k / 5 - .5, bend = Math.sin((u + .5) * Math.PI) * (Rs() - .5) * 18
+        pts.push({ x: wx(cx + ax * len * u + nx * bend), y: wy(cy + ay * len * u + ny * bend) })
+      }
+      Crayon.scumble(swooshL.ctx, pts, { width: P.swooshW * S * (.35 + Rs() * .45), alpha: P.swooshA * life * (.5 + p1.w * .5), seed: p1.seed, taper: .85, swell: 1 })
+    }
+    if (P.tufts > 0 && i % 3 === 0) {
+      const Rt = Crayon.rng(p1.seed * 100), side = Rt() < .5 ? 1 : -1
+      const cx = p1.x + nx * side * (P.swooshW * 1.2 + 12), cy = p1.y + ny * side * (P.swooshW * 1.2 + 12)
+      const base = Math.atan2(uy, ux) + (Rt() - .5) * 1.2, n = Math.round(12 * P.tufts)
+      for (let j = 0; j < n; j++) {
+        const ang = base + (Rt() - .5) * .5 + (j % 3 === 2 ? Math.PI / 2 : 0)
+        Crayon.hatch(tuftL.ctx, wx(cx + (Rt() - .5) * 24), wy(cy + (Rt() - .5) * 24), ang, (10 + Rt() * 16) * S, {
+          width: (1 + Rt() * 1.2) * S, color: 'rgb(30,70,120)', alpha: .38 * life * p1.w, seed: j, bend: .3
+        })
+      }
+    }
+  }
+
+  // 泡泡
+  const srcOn = { cloud: () => P.showCloud, bead: () => P.showBeads, snorkel: () => P.showSnorkel }
+  for (const b of bubbles) {
+    if (srcOn[b.src] && !srcOn[b.src]()) continue
+    const a = Crayon.clamp(b.alpha, 0, 1), chalk = b.layer === 'back' ? bChalk : fChalk, pencil = b.layer === 'back' ? bPencil : fPencil
+    const k = b.k ?? 1
+    if (k > .05) {
+      Crayon.disc(chalk.ctx, wx(b.x), wy(b.y), b.r * S, { alpha: a * (.5 + .4 * k), soft: .25, seed: b.seed, highlight: b.r > 8 && k > .6 ? .6 * a : 0 })
+      if (b.r > 7 && (b.seed % 3) < 1) Crayon.ring(pencil.ctx, wx(b.x), wy(b.y), b.r * S * 1.02, { wobble: .1, turns: 1.05, gap: .25, width: 1.4 * S, seed: b.seed, alpha: .5 * a * k, color: 'rgb(140,200,190)' })
+    }
+    if (k < .95) Crayon.ring(pencil.ctx, wx(b.x), wy(b.y), b.r * S, { wobble: .12, turns: 1.12, gap: .08, width: Math.max(1.4, b.r * .16) * S, seed: b.seed, alpha: a * (1 - k) * .95 })
+  }
+
+  tuftL.composite(ctx); swooshL.composite(ctx); bChalk.composite(ctx); bPencil.composite(ctx)
+
+  // 绘制当前物体 (Active Sprite)
+  if (currentSprite.complete) {
+    const h = activeObj.size * S
+    const w = h * currentSprite.width / currentSprite.height
+    const bob = isPoised && !dragging ? Math.sin(T * 3) * 3 : 0
+    ctx.save()
+    ctx.translate(wx(g.x), wy(g.y + bob))
+    ctx.rotate(g.angle)
+    ctx.drawImage(currentSprite, -w / 2, -h / 2, w, h)
+    ctx.restore()
+  }
+
+  // 没入水下的 wash 蓝调
+  if (P.wash > 0 && P.showWater) {
+    ctx.save(); ctx.globalAlpha = P.wash; ctx.fillStyle = '#0799ea'; ctx.beginPath()
+    for (let x = 0; x <= WW; x += 8) { const y = waterHeight(x, T); x ? ctx.lineTo(wx(x), wy(y)) : ctx.moveTo(wx(x), wy(y)) }
+    ctx.lineTo(wx(WW), SH + 10); ctx.lineTo(0, SH + 10); ctx.closePath(); ctx.fill(); ctx.restore()
+  }
+
+  // 水面泡沫云
+  if (P.showFroth) for (const f of froth) {
+    const y = f.y - f.age * 5, r = f.r * (1 + f.age * .12)
+    Crayon.disc(fChalk.ctx, wx(f.x), wy(y), r * S, { alpha: .92, soft: .4, seed: f.seed })
+    if (f.inv) {
+      Crayon.disc(invL.ctx, wx(f.x + 4), wy(y + 3), r * .45 * S, { rgb: '120,175,190', alpha: .45, soft: .3, seed: f.seed + 1 })
+      if (f.seed % 2 < 1) Crayon.ring(invL.ctx, wx(f.x - 5), wy(y - 4), r * .4 * S, { wobble: .12, turns: 1.05, gap: .15, width: 1.6 * S, seed: f.seed + 2, alpha: .5, color: 'rgb(90,150,175)' })
+    }
+  }
+
+  // 水面涟漪（半圆断弧）
+  if (P.showRipple && contact !== null) {
+    const wetR = T - contact, water = waterHeight(g.x, T), Rr = Crayon.rng(911)
+    for (let i = 0; i < P.ringCount; i++) {
+      const w = wetR - i * P.ringStagger
+      if (w <= 0) continue
+      const radius = Math.min(P.ringMax, expansion(w) * P.ringScale)
+      if (radius < 8) continue
+      const near = radius * .24, far = near / (1 + radius / 420), ry = (near + far) / 2
+      const cy = water + 40 + ry
+      const life = Crayon.clamp(1 - w / P.ringLife, 0, 1)
+      const alpha = P.ringA * Math.pow(life, .8) * (1 - (i / P.ringCount) * P.ringFade)
+      if (alpha <= .02) continue
+      const half = Math.PI * P.ringArc, span = half * 2
+      const segs = 2 + Math.round(Rr() * 2)
+      let a0 = Math.PI / 2 - half
+      for (let sg = 0; sg < segs; sg++) {
+        const len = span * ((1 - P.ringGap) / segs) * (.7 + Rr() * .6)
+        const a1 = Math.min(a0 + len, Math.PI / 2 + half)
+        const pts = [], steps = Math.max(8, Math.round((a1 - a0) * radius / 5))
+        for (let k = 0; k <= steps; k++) {
+          const th = a0 + (a1 - a0) * k / steps
+          const rr = 1 + .06 * (Crayon.noise1(th * 1.7 + i, 40 + sg) - .5) * 2
+          pts.push({ x: wx(g.x + Math.cos(th) * radius * rr), y: wy(cy + Math.sin(th) * ry * rr) })
+        }
+        Crayon.stroke(fPencil.ctx, pts, {
+          width: P.ringW * S * (1 - (i / P.ringCount) * .35), color: 'rgb(255,255,255)',
+          alpha, seed: i * 13 + sg, taper: .9, swell: 1,
+        })
+        a0 = a1 + span * P.ringGap / segs
+      }
+    }
+  }
+
+  // 飞溅水滴
+  for (const d of drops) {
+    const a = Crayon.clamp(1 - d.age / 1.2, 0, 1), L = 10 + Math.hypot(d.vx, d.vy) * .02, ang = Math.atan2(d.vy, d.vx)
+    Crayon.stroke(fChalk.ctx, [{ x: wx(d.x - Math.cos(ang) * L), y: wy(d.y - Math.sin(ang) * L) }, { x: wx(d.x), y: wy(d.y) }], {
+      width: 4 * S, color: 'rgb(255,255,255)', alpha: .9 * a, seed: d.seed, taper: .9, swell: 0
+    })
+  }
+
+  fChalk.composite(ctx); invL.composite(ctx); fPencil.composite(ctx)
+}
+
+// ==========================================
+// 7. 物体切换与 UI 绑定 (Switching & UI Wiring)
+// ==========================================
+function switchObject(objId) {
+  if (objId === 'goggle') objId = 'mask'
+  if (!OBJECT_DEFS[objId]) return
+  activeObjId = objId
+  activeObj = OBJECT_DEFS[objId]
+  loadActiveSprite()
+
+  // 同步物理参数
+  P.terminal = activeObj.terminal; P.__sync('terminal', P.terminal)
+  P.buoy = activeObj.buoy; P.__sync('buoy', P.buoy)
+  P.torque = activeObj.torque; P.__sync('torque', P.torque)
+  P.airTotal = activeObj.baseAir; P.__sync('airTotal', P.airTotal)
+  P.airTau = activeObj.airTau; P.__sync('airTau', P.airTau)
+  P.froth = activeObj.frothCount; P.__sync('froth', P.froth)
+  P.frothR = activeObj.frothR; P.__sync('frothR', P.frothR)
+  P.cloud = activeObj.cloudCount; P.__sync('cloud', P.cloud)
+  P.cloudR = activeObj.cloudR; P.__sync('cloudR', P.cloudR)
+  P.cloudTau = activeObj.airTau * .45; P.__sync('cloudTau', P.cloudTau)
+  P.snorkel = activeObj.snorkelAir; P.__sync('snorkel', P.snorkel)
+
+  updateSwitcherButtons()
+  replay()
+  const n = activeObj.name[currentLang]
+  const toastMsg = currentLang === 'zh'
+    ? `${activeObj.icon} 点击${n}，让它坠入海里！`
+    : `${activeObj.icon} Tap ${n} to dive into the sea!`
+  Crayon.showToast(toastMsg)
+}
+
+function updateSwitcherButtons() {
+  const container = document.getElementById('objSwitchers')
+  if (!container) return
+  container.innerHTML = ''
+  const currentKey = (activeObjId === 'goggle') ? 'mask' : activeObjId
+  const otherKeys = PRIMARY_OBJECTS.filter(k => k !== currentKey)
+  for (const k of otherKeys) {
+    const o = OBJECT_DEFS[k]
+    const btn = document.createElement('button')
+    btn.className = `cr-obj-btn cr-obj-${k}`
+    btn.title = `Switch to ${o.name.en} / 切换为${o.name.zh}`
+    
+    const img = document.createElement('img')
+    img.src = o.src
+    img.alt = o.name[currentLang]
+    img.className = `cr-obj-thumb cr-thumb-${k}`
+    btn.appendChild(img)
+    
+    btn.onclick = () => switchObject(k)
+    container.appendChild(btn)
+  }
+}
+
+// 拖拽控制 (Drag & Drop)
+function toWorld(e) {
+  const r = cv.getBoundingClientRect()
+  return {
+    x: (e.clientX - r.left) / r.width * WW,
+    y: (e.clientY - r.top) / r.height * WH + camera
+  }
+}
+
+// 仅在空中悬停状态允许抓取与调整下落高度
+function isHit(w) {
+  if (!g || !isPoised) return false
+  const dx = Math.abs(w.x - g.x)
+  const dy = Math.abs(w.y - g.y)
+  if (activeObj.id === 'crayon') {
+    return dx < 30 && dy < activeObj.size * 0.65
+  }
+  return Math.hypot(w.x - g.x, w.y - g.y) < activeObj.size * 0.55
+}
+
+let dragOffsetX = 0, dragOffsetY = 0
+let pointerStartPos = null
+
+cv.addEventListener('pointerdown', e => {
+  if (!isPoised) return
+  const w = toWorld(e)
+  if (isHit(w)) {
+    dragging = true
+    pointerStartPos = { x: e.clientX, y: e.clientY }
+    dragOffsetX = w.x - g.x
+    dragOffsetY = w.y - g.y
+    try { cv.setPointerCapture(e.pointerId) } catch(err) {}
+    cv.style.cursor = 'grabbing'
+    g.vx = 0; g.vy = 0; g.av = 0
+  }
+})
+
+window.addEventListener('pointermove', e => {
+  const w = toWorld(e)
+  if (!dragging) {
+    cv.style.cursor = isHit(w) ? 'grab' : 'default'
+  } else {
+    cv.style.cursor = 'grabbing'
+    g.x = Crayon.clamp(w.x - dragOffsetX, 80, WW - 80)
+    // 限制拖拽范围仅在水面以上（从顶部 50px 到贴近水面）
+    const maxNoseY = waterHeight(g.x, T) - 15
+    const maxY = maxNoseY - activeObj.noseOffset * activeObj.size
+    g.y = Crayon.clamp(w.y - dragOffsetY, 60, maxY)
+    g.vx = 0; g.vy = 0; g.av = 0
+  }
+})
+
+window.addEventListener('pointerup', e => {
+  if (dragging) {
+    dragging = false
+    try { cv.releasePointerCapture(e.pointerId) } catch(err) {}
+    cv.style.cursor = 'default'
+    // 无论是直接点击还是拖拽松手，均触发自由落体
+    isPoised = false
+    contact = null
+    path = []
+    bubbles = []
+    froth = []
+    drops = []
+    g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+    updateHintBar()
+  }
+})
+
+function updateHintBar() {
+  const dict = I18N[currentLang]
+  const dtEl = document.getElementById('hintDesktop')
+  if (dtEl) {
+    dtEl.innerHTML =
+      '<span class="cr-hint-item cr-hint-play"><svg class="cr-play-icon" viewBox="0 0 24 24" width="13" height="13"><polygon points="5 3 19 12 5 21 5 3"/></svg> ' + dict.hintPlayDrop + '</span>' +
+      '<span class="cr-hint-item"><kbd class="cr-badge">' + (currentLang === 'zh' ? '拖拽' : 'Drag') + '</kbd> ' + dict.hintDragDrop + '</span>' +
+      '<span class="cr-hint-item"><kbd class="cr-badge">Space</kbd> ' + dict.hintReset + '</span>' +
+      '<span class="cr-hint-item"><kbd class="cr-badge">P</kbd> ' + dict.hintPause + '</span>' +
+      '<span class="cr-hint-item"><kbd class="cr-badge">C</kbd> ' + dict.hintPanel + '</span>'
+  }
+  const poisedEl = document.getElementById('hintMobilePoised')
+  const droppedEl = document.getElementById('hintMobileDropped')
+  const poisedText = document.getElementById('hintMobileText')
+  const orSelectText = document.getElementById('hintMobileOrSelect')
+  if (poisedText) poisedText.textContent = dict.hintMobilePoised || dict.hintMobile
+  if (orSelectText) orSelectText.textContent = dict.hintMobileOrSelect || ''
+
+  if (poisedEl && droppedEl) {
+    if (isPoised) {
+      poisedEl.classList.add('visible')
+      droppedEl.classList.remove('visible')
+    } else {
+      poisedEl.classList.remove('visible')
+      droppedEl.classList.add('visible')
+    }
+  }
+}
+
+const mbReset = document.getElementById('mobileResetBtn')
+if (mbReset) {
+  mbReset.onclick = (e) => {
+    e.stopPropagation()
+    replay()
+  }
+}
+
+// 暂停状态联动
+function updatePauseUI(isPaused) {
+  const badge = document.getElementById('pausedBadge')
+  if (badge) {
+    badge.textContent = I18N[currentLang].paused
+    badge.classList.toggle('visible', isPaused)
+  }
+}
+
+// 复制参数分享链接
+function copyShareLink() {
+  const params = new URLSearchParams()
+  params.set('obj', activeObjId)
+  params.set('lang', currentLang)
+  const keys = ['terminal','buoy','torque','spreadRate','spreadPow','froth','frothR','ringCount','cloudTau','airTotal','airTau','tauFix','grain']
+  for (const k of keys) {
+    if (k in P) params.set(k, typeof P[k] === 'boolean' ? (P[k] ? '1' : '0') : P[k])
+  }
+  const shareUrl = `${location.origin}${location.pathname}?${params.toString()}`
+  navigator.clipboard.writeText(shareUrl).then(() => {
+    Crayon.showToast(I18N[currentLang].shareCopied)
+  }).catch(() => {
+    prompt(I18N[currentLang].shareCopied, shareUrl)
+  })
+}
+
+// 键盘快捷键监听
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return
+  if (e.code === 'Space') {
+    e.preventDefault()
+    replay()
+  }
+  if (e.key === 'p' || e.key === 'P') {
+    P.pause = !P.pause
+    P.__sync('pause', P.pause)
+    updatePauseUI(P.pause)
+  }
+  if (e.key === '1') jumpTo(.55)
+  if (e.key === '2') jumpTo(1.5)
+  if (e.key === '3') jumpTo(5.0)
+  if (e.key === 'f' || e.key === 'F') {
+    const w = contact === null ? 0 : T - contact
+    P.tauFix = !P.tauFix; P.__sync('tauFix', P.tauFix)
+    if (w > 0) jumpTo(w)
+  }
+})
+
+// 语言切换
+function setLanguage(lang) {
+  currentLang = lang
+  localStorage.setItem('crayon_dive_lang', lang)
+  localStorage.setItem('goggle_sink_lang', lang)
+  const dict = I18N[lang]
+
+  // 更新面板文字
+  if (P.__dom) {
+    P.__dom.headTitle.textContent = dict.panelTitle
+    for (const id in P.__dom.secTitles) {
+      const key = 'sec' + id.charAt(0).toUpperCase() + id.slice(1)
+      if (dict[key]) P.__dom.secTitles[id].textContent = dict[key]
+    }
+    for (const k in P.__dom.rowLabels) {
+      if (dict[k]) P.__dom.rowLabels[k].textContent = dict[k]
+    }
+    const btns = P.__dom.footer.querySelectorAll('.cr-btn')
+    if (btns.length >= 2) {
+      btns[0].textContent = dict.replayBtn
+      btns[1].textContent = dict.copyShareBtn
+    }
+  }
+
+  // 更新底部提示条与切换按钮
+  updateHintBar()
+  updateSwitcherButtons()
+  const badge = document.getElementById('pausedBadge')
+  if (badge) badge.textContent = dict.paused
+}
+
+document.getElementById('langToggle').onclick = () => {
+  setLanguage(currentLang === 'zh' ? 'en' : 'zh')
+}
+
+document.getElementById('panelToggle').onclick = () => {
+  P.__togglePanel()
+}
+
+// 主渲染时钟
+let tPrev = performance.now() / 1000
+function loop() {
+  const now = performance.now() / 1000, dt = Math.min(.05, now - tPrev); tPrev = now
+  if (!P.pause) step(dt)
+  draw()
+  requestAnimationFrame(loop)
+}
+
+// 初始化
+window.addEventListener('resize', resize)
+loadActiveSprite()
+resize()
+replay()
+setLanguage(currentLang)
+
+// 解析 URL 参数覆盖
+const q = new URLSearchParams(location.search)
+if (q.has('obj') && OBJECT_DEFS[q.get('obj')]) {
+  switchObject(q.get('obj'))
+}
+if (q.has('lang') && I18N[q.get('lang')]) {
+  setLanguage(q.get('lang'))
+}
+if (q.has('fix')) {
+  P.tauFix = q.get('fix') !== '0'; P.__sync('tauFix', P.tauFix)
+}
+for (const [k, v] of q) {
+  if (k === 't' || k === 'fix' || k === 'obj' || k === 'lang' || !(k in P)) continue
+  P[k] = (typeof P[k] === 'boolean') ? (v !== '0') : parseFloat(v)
+  P.__sync(k, P[k])
+}
+if (q.has('t')) jumpTo(parseFloat(q.get('t')))
+
+async function runRecorder(mode) {
+  // Preload all 3 object sprites
+  const spritePromises = Object.keys(OBJECT_DEFS).map(k => {
+    return new Promise(res => {
+      const img = new Image()
+      img.src = OBJECT_DEFS[k].src
+      img.onload = () => { OBJECT_DEFS[k].img = img; res() }
+      img.onerror = () => res()
+    })
+  })
+  await Promise.all(spritePromises)
+
+  const FPS = 22
+  const dt = 1 / FPS
+
+  if (mode === 'hero') {
+    switchObject('mask')
+    replay()
+    await new Promise(r => setTimeout(r, 200))
+
+    const totalFrames = 95
+    for (let f = 0; f < totalFrames; f++) {
+      if (f === 14) {
+        isPoised = false
+        contact = null
+        path = []; bubbles = []; froth = []; drops = []
+        g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+        updateHintBar()
+      }
+      step(dt)
+      draw()
+
+      // Overlay UI directly on canvas
+      ctx.save()
+      const rightX = WW - 32, topY = 20
+      if (OBJECT_DEFS.camera.img && OBJECT_DEFS.crayon.img) {
+        // Camera button
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'
+        ctx.lineWidth = 1.5
+        ctx.shadowColor = 'rgba(0,0,0,0.35)'
+        ctx.shadowBlur = 8; ctx.shadowOffsetY = 3
+        ctx.beginPath()
+        ctx.roundRect(rightX - 130, topY, 56, 56, 12)
+        ctx.fill(); ctx.stroke()
+        ctx.drawImage(OBJECT_DEFS.camera.img, rightX - 127, topY + 3, 50, 50)
+
+        // Crayon button
+        ctx.beginPath()
+        ctx.roundRect(rightX - 62, topY, 56, 56, 12)
+        ctx.fill(); ctx.stroke()
+        ctx.save()
+        ctx.translate(rightX - 34, topY + 28)
+        ctx.rotate(30 * Math.PI / 180)
+        ctx.drawImage(OBJECT_DEFS.crayon.img, -22, -22, 44, 44)
+        ctx.restore()
+      }
+
+      // Bottom bar
+      ctx.font = '500 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      ctx.fillStyle = '#ffffff'
+      ctx.shadowColor = 'rgba(0,0,0,0.6)'
+      ctx.shadowBlur = 4; ctx.shadowOffsetY = 1
+      if (isPoised) {
+        ctx.fillText('▶ 点击物体下落   [拖拽] 选择高度   [Space] 回到原来状态   [P] 暂停   [C] 控制面板', 28, WH - 22)
+      } else {
+        ctx.fillText('▶ 正在下潜...   [Space] 回到原来状态   [P] 暂停   [C] 控制面板', 28, WH - 22)
+      }
+      ctx.restore()
+
+      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88))
+      await fetch(`http://localhost:3456/save-frame?anim=hero&i=${f}`, { method: 'POST', body: blob })
+    }
+    await fetch('http://localhost:3456/done?anim=hero', { method: 'POST' })
+  } else if (mode === 'three-objects') {
+    const list = [
+      { id: 'mask', label: '🤿 潜水面镜 (Dive Mask) · 宽阔马鞍形横向泡沫 + 鼻梁阻水 + 呼吸管气泡' },
+      { id: 'camera', label: '📷 水下相机 (Camera) · 紧凑块状快速下沉 + 四角与镜头边缘脱落' },
+      { id: 'crayon', label: '✏️ 细长蜡笔 (Crayon) · 超低阻力垂直入水 + 笔尖极细针状尾迹' }
+    ]
+
+    let frameIdx = 0
+    for (const item of list) {
+      switchObject(item.id)
+      replay()
+      await new Promise(r => setTimeout(r, 200))
+
+      for (let f = 0; f < 42; f++) {
+        if (f === 8) {
+          isPoised = false
+          contact = null
+          path = []; bubbles = []; froth = []; drops = []
+          g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+          updateHintBar()
+        }
+        step(dt)
+        draw()
+
+        // Badge banner
+        ctx.save()
+        ctx.fillStyle = 'rgba(18, 28, 36, 0.82)'
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.roundRect(24, 20, 560, 36, 18)
+        ctx.fill(); ctx.stroke()
+
+        ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(item.label, 38, 43)
+        ctx.restore()
+
+        const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.88))
+        await fetch(`http://localhost:3456/save-frame?anim=three-objects&i=${frameIdx++}`, { method: 'POST', body: blob })
+      }
+    }
+    await fetch('http://localhost:3456/done?anim=three-objects', { method: 'POST' })
+  } else if (mode === 'video') {
+    // Dynamic Aspect-Ratio High-Definition Video Mode
+    const urlParams = new URLSearchParams(window.location.search)
+    const animName = urlParams.get('anim') || 'video'
+    const reqW = parseInt(urlParams.get('w')) || 1080
+    const reqH = parseInt(urlParams.get('h')) || 1440
+    resize(reqW, reqH)
+    
+    const isMobileMode = (reqH > reqW && reqW / reqH < 0.65)
+
+    function easeInOut(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+    }
+    function lerp(a, b, t) { return a + (b - a) * t }
+
+    function drawBadge(ctx, x, y, w, h, text) {
+      ctx.save()
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'
+      ctx.lineWidth = 1.5
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+      ctx.shadowBlur = 4; ctx.shadowOffsetY = 2
+      ctx.beginPath()
+      ctx.roundRect(x, y, w, h, 7)
+      ctx.fill(); ctx.stroke()
+      ctx.shadowColor = 'transparent'
+      ctx.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(text, x + w / 2, y + h / 2)
+      ctx.restore()
+    }
+
+    function drawExactBrowserUI(curX, curY, isClicking, pressedKey) {
+      ctx.save()
+
+      // 1. Top-Right Buttons (Rightmost to Leftmost)
+      const topY = isMobileMode ? 26 : 22
+      const shadowOff = isMobileMode ? 3 : 4
+      const isSettingsPressed = (pressedKey === 'settings')
+      const isLangPressed = (pressedKey === 'lang')
+
+      // 1.1 Settings Button (🎛️)
+      const setBtnSize = isMobileMode ? 44 : 48
+      const setX = cv.width - (isMobileMode ? 18 : 24) - setBtnSize + (isSettingsPressed ? shadowOff : 0)
+      const setY = topY + (isSettingsPressed ? shadowOff : 0)
+
+      ctx.save()
+      // Crisp solid black shadow underneath (matches CSS box-shadow: 4px 4px 0 #000 100%)
+      if (!isSettingsPressed) {
+        ctx.fillStyle = '#000000'
+        ctx.beginPath()
+        ctx.roundRect(setX + shadowOff, setY + shadowOff, setBtnSize, setBtnSize, 12)
+        ctx.fill()
+      }
+      // White body with 2.5px crisp black border
+      ctx.fillStyle = '#ffffff'
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.roundRect(setX, setY, setBtnSize, setBtnSize, 12)
+      ctx.fill()
+      ctx.stroke()
+
+      // Perfectly centered 3-sliders SVG icon (matches <svg viewBox="0 0 24 24">)
+      ctx.save()
+      ctx.translate(setX + setBtnSize / 2, setY + setBtnSize / 2)
+      const iconScale = isMobileMode ? 18 / 24 : 22 / 24
+      ctx.scale(iconScale, iconScale)
+      ctx.translate(-12, -12)
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 2.2
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      // Col 1
+      ctx.moveTo(4, 3); ctx.lineTo(4, 10)
+      ctx.moveTo(4, 14); ctx.lineTo(4, 21)
+      ctx.moveTo(1, 14); ctx.lineTo(7, 14)
+      // Col 2
+      ctx.moveTo(12, 3); ctx.lineTo(12, 8)
+      ctx.moveTo(12, 12); ctx.lineTo(12, 21)
+      ctx.moveTo(9, 8); ctx.lineTo(15, 8)
+      // Col 3
+      ctx.moveTo(20, 3); ctx.lineTo(20, 12)
+      ctx.moveTo(20, 16); ctx.lineTo(20, 21)
+      ctx.moveTo(17, 16); ctx.lineTo(23, 16)
+      ctx.stroke()
+      ctx.restore()
+      ctx.restore()
+
+      // 1.2 Lang Toggle Button (中 / EN)
+      const langBtnW = isMobileMode ? 74 : 86
+      const langBtnH = isMobileMode ? 44 : 48
+      const langX = setX - (isMobileMode ? 10 : 14) - langBtnW + (isLangPressed ? shadowOff : 0)
+      const langY = topY + (isLangPressed ? shadowOff : 0)
+
+      ctx.save()
+      // Crisp solid black shadow underneath
+      if (!isLangPressed) {
+        ctx.fillStyle = '#000000'
+        ctx.beginPath()
+        ctx.roundRect(langX + shadowOff, langY + shadowOff, langBtnW, langBtnH, 12)
+        ctx.fill()
+      }
+      // White body with 2.5px crisp black border
+      ctx.fillStyle = '#ffffff'
+      ctx.strokeStyle = '#000000'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.roundRect(langX, langY, langBtnW, langBtnH, 12)
+      ctx.fill()
+      ctx.stroke()
+
+      // Text dead-center
+      ctx.font = isMobileMode ? '700 13.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' : '700 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      ctx.fillStyle = '#000000'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('中 / EN', langX + langBtnW / 2, langY + langBtnH / 2 + 1)
+      ctx.restore()
+
+      // 1.3 Object Switcher Stickers
+      const otherKeys = PRIMARY_OBJECTS.filter(k => k !== activeObjId)
+      const slotSize = isMobileMode ? 64 : 80
+      const slot2X = langX - (isMobileMode ? 12 : 14) - slotSize
+      const slot1X = slot2X - (isMobileMode ? 10 : 12) - slotSize
+      const slotY = isMobileMode ? 16 : 6
+      const slots = [
+        { key: otherKeys[0], x: slot1X, y: slotY },
+        { key: otherKeys[1], x: slot2X, y: slotY }
+      ]
+
+      for (const slot of slots) {
+        const o = OBJECT_DEFS[slot.key]
+        if (!o || !o.img) continue
+        const isPressed = (pressedKey === slot.key)
+        const ox = slot.x + slotSize / 2 + (isPressed ? 2 : 0)
+        const oy = slot.y + slotSize / 2 + (isPressed ? 2 : 0)
+
+        ctx.save()
+        ctx.translate(ox, oy)
+        if (isPressed) ctx.scale(0.95, 0.95)
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.28)'
+        ctx.shadowBlur = isPressed ? 6 : 14
+        ctx.shadowOffsetY = isPressed ? 3 : 8
+
+        const scaleFactor = isMobileMode ? 0.82 : 1.0
+        if (slot.key === 'camera') {
+          ctx.drawImage(o.img, -33 * scaleFactor, -29.5 * scaleFactor, 66 * scaleFactor, 59 * scaleFactor)
+        } else if (slot.key === 'crayon') {
+          ctx.rotate(30 * Math.PI / 180)
+          ctx.drawImage(o.img, -8 * scaleFactor, -32 * scaleFactor, 16 * scaleFactor, 64 * scaleFactor)
+        } else if (slot.key === 'mask') {
+          ctx.drawImage(o.img, -36 * scaleFactor, -36.5 * scaleFactor, 72 * scaleFactor, 73 * scaleFactor)
+        }
+        ctx.restore()
+      }
+
+      // 2. Bottom Shortcut Bar
+      if (isMobileMode) {
+        // Authentic Mobile UI: Poised vs Dropped state
+        ctx.save()
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        const mbY = cv.height - 46
+        if (isPoised) {
+          ctx.font = '600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+          ctx.fillStyle = '#ffffff'
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.65)'
+          ctx.shadowBlur = 8; ctx.shadowOffsetY = 2
+          ctx.fillText('点击物体下落 · 拖拽选择高度', cv.width / 2, mbY)
+        } else {
+          // Dropped: [Reset] button + 或选择其他物体下落
+          const rw = 108, rh = 40
+          const rx = cv.width / 2 - rw - 8
+          const ry = mbY - rh / 2
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.18)'
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2.2
+          ctx.shadowColor = '#ffffff'
+          ctx.shadowOffsetX = 3; ctx.shadowOffsetY = 3; ctx.shadowBlur = 0
+          ctx.beginPath()
+          ctx.roundRect(rx, ry, rw, rh, 12)
+          ctx.fill(); ctx.stroke()
+          ctx.shadowColor = 'transparent'
+          ctx.font = '700 15px -apple-system, sans-serif'
+          ctx.fillStyle = '#ffffff'
+          ctx.fillText('Reset', rx + rw / 2, ry + rh / 2)
+
+          ctx.font = '500 14px -apple-system, sans-serif'
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'
+          ctx.shadowBlur = 4
+          ctx.textAlign = 'left'
+          ctx.fillText('或选择其他物体下落', rx + rw + 18, mbY)
+        }
+        ctx.restore()
+      } else {
+        // Desktop / Tablet bottom-left shortcut hint bar
+        ctx.save()
+        let bx = 32, by = cv.height - 24
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+        ctx.shadowBlur = 4; ctx.shadowOffsetY = 1
+
+        ctx.fillStyle = '#ffffff'
+        ctx.font = '500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+        ctx.beginPath()
+        ctx.moveTo(bx, by - 6); ctx.lineTo(bx + 8, by); ctx.lineTo(bx, by + 6); ctx.closePath()
+        ctx.fill()
+        bx += 14
+        ctx.fillText('点击物体下落', bx, by)
+        bx += ctx.measureText('点击物体下落').width + 16
+
+        drawBadge(ctx, bx, by - 11, 38, 22, '拖拽')
+        bx += 44
+        ctx.fillText('选择高度', bx, by)
+        bx += ctx.measureText('选择高度').width + 16
+
+        drawBadge(ctx, bx, by - 11, 52, 22, 'Space')
+        bx += 58
+        ctx.fillText('回到原来状态', bx, by)
+        bx += ctx.measureText('回到原来状态').width + 16
+
+        drawBadge(ctx, bx, by - 11, 24, 22, 'P')
+        bx += 30
+        ctx.fillText('暂停', bx, by)
+        bx += ctx.measureText('暂停').width + 16
+
+        drawBadge(ctx, bx, by - 11, 24, 22, 'C')
+        bx += 30
+        ctx.fillText('控制面板', bx, by)
+        ctx.restore()
+      }
+
+      // 3. Virtual Mouse / Touch Pointer
+      ctx.save()
+      ctx.translate(curX, curY)
+      if (isMobileMode) {
+        // Touch point circle with soft ripple
+        ctx.fillStyle = isClicking ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255, 255, 255, 0.45)'
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 2
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)'
+        ctx.shadowBlur = 6
+        ctx.beginPath()
+        ctx.arc(0, 0, isClicking ? 20 : 16, 0, Math.PI * 2)
+        ctx.fill(); ctx.stroke()
+      } else {
+        // Desktop arrow pointer
+        if (isClicking) {
+          ctx.scale(0.9, 0.9)
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+          ctx.lineWidth = 2.5
+          ctx.beginPath()
+          ctx.arc(0, 0, 18, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+        ctx.fillStyle = '#1e1e1e'
+        ctx.strokeStyle = '#ffffff'
+        ctx.lineWidth = 2
+        ctx.lineJoin = 'round'
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)'
+        ctx.shadowBlur = 6; ctx.shadowOffsetY = 2
+        ctx.beginPath()
+        ctx.moveTo(0, 0)
+        ctx.lineTo(0, 20)
+        ctx.lineTo(5, 15.5)
+        ctx.lineTo(9, 24.5)
+        ctx.lineTo(13, 22.8)
+        ctx.lineTo(9.2, 14)
+        ctx.lineTo(15, 14)
+        ctx.closePath()
+        ctx.fill(); ctx.stroke()
+      }
+      ctx.restore()
+
+      ctx.restore()
+    }
+
+    const VFPS = 30
+    const vdt = 1 / VFPS
+    const TOTAL_VFRAMES = 672 // Exactly 22.40s (14 bars @ 150 BPM)
+
+    switchObject('mask')
+    replay()
+    await new Promise(r => setTimeout(r, 200))
+
+    // Dynamic targets
+    const centerX = Math.round(cv.width * 0.5)
+    const centerY = Math.round(g ? g.y * S : cv.height * 0.42)
+
+    const slotSize = isMobileMode ? 64 : 80
+    const setBtnSize = isMobileMode ? 44 : 48
+    const setX = cv.width - (isMobileMode ? 18 : 24) - setBtnSize
+    const langBtnW = isMobileMode ? 74 : 86
+    const langX = setX - (isMobileMode ? 10 : 14) - langBtnW
+    const slot2X = langX - (isMobileMode ? 12 : 14) - slotSize
+    const slot1X = slot2X - (isMobileMode ? 10 : 12) - slotSize
+    const slotY = isMobileMode ? 16 : 6
+
+    const slot1Center = { x: slot1X + slotSize / 2, y: slotY + slotSize / 2 }
+    const slot2Center = { x: slot2X + slotSize / 2, y: slotY + slotSize / 2 }
+
+    let curX = centerX + 120, curY = centerY + 140
+    let isClicking = false
+    let pressedKey = null
+
+    for (let f = 0; f < TOTAL_VFRAMES; f++) {
+      // ----------------------------------------------------
+      // ITEM 1: DIVE MASK (Splash target: f=96 / 3.20s, Downbeat 1)
+      // ----------------------------------------------------
+      if (f < 50) {
+        // Move towards mask
+        const t = easeInOut(f / 50)
+        curX = lerp(centerX + 120, centerX, t)
+        curY = lerp(centerY + 140, centerY, t)
+        isClicking = false
+      } else if (f >= 50 && f < 81) {
+        // Hover poised mask during acoustic intro build
+        curX = centerX
+        curY = centerY
+        isClicking = false
+      } else if (f >= 81 && f <= 83) {
+        // Click mask at f=82 (falls for 14 frames -> splash at f=96 / 3.20s!)
+        isClicking = true
+        if (f === 82) {
+          isPoised = false
+          contact = null
+          path = []; bubbles = []; froth = []; drops = []
+          g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+        }
+      } else if (f > 83 && f < 208) {
+        // Mask falls, hits water at f=96 (3.20s), sinks with rich bubble plume
+        isClicking = false
+      }
+      // ----------------------------------------------------
+      // ITEM 2: CAMERA (Splash target: f=288 / 9.60s, Downbeat 2)
+      // ----------------------------------------------------
+      else if (f >= 208 && f < 232) {
+        // Glide to Camera button
+        const t = easeInOut((f - 208) / 24)
+        curX = lerp(centerX, slot1Center.x, t)
+        curY = lerp(centerY, slot1Center.y, t)
+        isClicking = false
+      } else if (f >= 232 && f <= 235) {
+        // Click Camera button
+        isClicking = true
+        pressedKey = 'camera'
+      } else if (f === 236) {
+        isClicking = false
+        pressedKey = null
+        switchObject('camera')
+        replay()
+      } else if (f > 236 && f < 270) {
+        // Glide from button to poised Camera
+        const t = easeInOut((f - 236) / 34)
+        curX = lerp(slot1Center.x, centerX, t)
+        curY = lerp(slot1Center.y, centerY, t)
+        isClicking = false
+      } else if (f >= 270 && f < 272) {
+        curX = centerX; curY = centerY; isClicking = false
+      } else if (f >= 272 && f <= 274) {
+        // Click Camera at f=273 (falls for 15 frames -> splash at f=288 / 9.60s!)
+        isClicking = true
+        if (f === 273) {
+          isPoised = false
+          contact = null
+          path = []; bubbles = []; froth = []; drops = []
+          g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+        }
+      } else if (f > 274 && f < 400) {
+        // Camera hits water at f=288 (9.60s), sinks with cavitation trail
+        isClicking = false
+      }
+      // ----------------------------------------------------
+      // ITEM 3: CRAYON (Splash target: f=480 / 16.00s, Downbeat 3)
+      // ----------------------------------------------------
+      else if (f >= 400 && f < 424) {
+        // Glide to Crayon button
+        const t = easeInOut((f - 400) / 24)
+        curX = lerp(centerX, slot2Center.x, t)
+        curY = lerp(centerY, slot2Center.y, t)
+        isClicking = false
+      } else if (f >= 424 && f <= 427) {
+        // Click Crayon button
+        isClicking = true
+        pressedKey = 'crayon'
+      } else if (f === 428) {
+        isClicking = false
+        pressedKey = null
+        switchObject('crayon')
+        replay()
+      } else if (f > 428 && f < 461) {
+        // Glide from button to poised Crayon
+        const t = easeInOut((f - 428) / 33)
+        curX = lerp(slot2Center.x, centerX, t)
+        curY = lerp(slot2Center.y, centerY, t)
+        isClicking = false
+      } else if (f >= 461 && f < 463) {
+        curX = centerX; curY = centerY; isClicking = false
+      } else if (f >= 463 && f <= 465) {
+        // Click Crayon at f=464 (falls for 16 frames -> splash at f=480 / 16.00s!)
+        isClicking = true
+        if (f === 464) {
+          isPoised = false
+          contact = null
+          path = []; bubbles = []; froth = []; drops = []
+          g.vx = 0; g.vy = 0; g.av = 0; g.air = 0; g.hover = 0
+        }
+      } else if (f > 465 && f < 615) {
+        // Crayon hits water at f=480 (16.00s), sinks deep with vortex ribbon
+        isClicking = false
+      }
+      // ----------------------------------------------------
+      // OUTRO: Lingering Hold & Gentle Rest (f=615 -> 672 / 20.5s -> 22.40s)
+      // ----------------------------------------------------
+      else if (f >= 615 && f < 645) {
+        const t = easeInOut((f - 615) / 30)
+        curX = lerp(centerX, centerX + 120, t)
+        curY = lerp(centerY, centerY + 140, t)
+        isClicking = false
+      } else {
+        curX = centerX + 120
+        curY = centerY + 140
+        isClicking = false
+      }
+
+      step(vdt)
+      draw()
+      drawExactBrowserUI(curX, curY, isClicking, pressedKey)
+
+      const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.94))
+      await fetch(`http://localhost:3456/save-frame?anim=${animName}&i=${f}`, { method: 'POST', body: blob })
+    }
+    await fetch(`http://localhost:3456/done?anim=${animName}`, { method: 'POST' })
+  }
+}
+
+if (q.has('record')) {
+  runRecorder(q.get('record'))
+} else {
+  loop()
+}
+</script>
+</body>
+</html>
