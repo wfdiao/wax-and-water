@@ -1129,7 +1129,7 @@ function loop() {
 }
 
 // 初始化
-window.addEventListener('resize', resize)
+window.addEventListener('resize', () => resize())
 loadActiveSprite()
 resize()
 replay()
