@@ -463,6 +463,8 @@ function replay(seed = activeObj ? activeObj.seed : 1) {
 function resize(customW, customH) {
   const cssW = customW || window.innerWidth
   const cssH = customH || window.innerHeight
+  // 窗口还没布局好（后台标签页、隐藏的 iframe 等）时宽高可能是 0：先跳过，等下一次 resize 再建画布
+  if (!(cssW > 0 && cssH > 0)) return
   dpr = Math.min(window.devicePixelRatio || 1, 2)
 
   // 动态屏幕适配标度 s (每个世界单位对应的屏幕 CSS 像素)
@@ -751,6 +753,7 @@ function jumpTo(wetTarget) {
 const wx = x => x * S, wy = y => (y - camera) * S
 
 function draw() {
+  if (!layers || !bgCanvas || !bgCanvas.width || !bgCanvas.height) return
   const [tuftL, swooshL, bChalk, bPencil, fChalk, fPencil, invL] = layers
   for (const l of layers) {
     if (l.name.includes('pencil') || l.name.includes('swoosh')) l.grainStrength = P.grain
@@ -1134,10 +1137,17 @@ document.getElementById('panelToggle').onclick = () => {
 // 主渲染时钟
 let tPrev = performance.now() / 1000
 function loop() {
-  const now = performance.now() / 1000, dt = Math.min(.05, now - tPrev); tPrev = now
-  if (!P.pause) step(dt)
-  draw()
   requestAnimationFrame(loop)
+  const now = performance.now() / 1000, dt = Math.min(.05, now - tPrev); tPrev = now
+  // 画布尺寸为 0 时先不推进模拟，避免物体在看不见的时候掉下去
+  if (!bgCanvas || !bgCanvas.width) { if (window.innerWidth > 0 && window.innerHeight > 0) resize(); return }
+  try {
+    if (!P.pause) step(dt)
+    draw()
+  } catch (e) {
+    // 单帧出错不能让整个动画停掉
+    if (!loop.warned) { console.error(e); loop.warned = true }
+  }
 }
 
 // 初始化
