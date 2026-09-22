@@ -95,7 +95,7 @@ where $\hat{\mathbf{v}} = \mathbf{v} / \|\mathbf{v}\|$ is the normalized velocit
 
 ### 2. Adaptive Bubble Morphology
 
-In picture-book illustration, dense foam can read as soft, opaque chalk, while sparse rising bubbles read as loose circular strokes. Each bubble measures nearby particles using a 40px broad-phase window followed by a size-aware overlap test. Three or more neighbors pull its morphology toward a solid disc; lower-density surroundings pull it toward an open ring. Temporal smoothing prevents abrupt visual flicker near the threshold.
+In picture-book illustration, dense foam can read as soft, opaque chalk, while sparse rising bubbles read as loose circular strokes. Each bubble measures nearby particles using a 40px broad-phase window followed by a size-aware overlap test. Three or more neighbors pull its morphology toward a solid disc; lower-density surroundings pull it back toward an open ring. Temporal smoothing prevents abrupt visual flicker near the threshold. An *Open-Ring Amount* slider blends between two counting modes: at 0, neighbors on any depth layer count fully and new bubbles start solid; at 1, only same-layer neighbors count and new bubbles start as rings.
 
 ### 3. Decoupling Paper Grain from Particle Movement
 

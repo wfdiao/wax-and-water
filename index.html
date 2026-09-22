@@ -195,6 +195,7 @@ const I18N = {
     rise: '上浮速度',
     beadR: '串珠半径',
     densN: '几个邻居算「挤」',
+    ringMix: '空心泡多少',
     tauFix: 'τ 弛豫修复 (F)',
     secSnorkel: '呼吸管咕嘟',
     snorkel: '预算 (颗)',
@@ -261,6 +262,7 @@ const I18N = {
     rise: 'Rise Velocity',
     beadR: 'Bead Radius',
     densN: 'Cluster Threshold (Disc)',
+    ringMix: 'Open-Ring Amount',
     tauFix: 'τ Relaxation Fix (F)',
     secSnorkel: 'Snorkel Glug',
     snorkel: 'Air Budget',
@@ -333,6 +335,7 @@ const P = Crayon.panel([
     rise:       { label: I18N[currentLang].rise, min: 20, max: 200, step: 5, value: 75 },
     beadR:      { label: I18N[currentLang].beadR, min: 2, max: 16, step: .5, value: 9 },
     densN:      { label: I18N[currentLang].densN, min: 1, max: 10, step: 1, value: 3 },
+    ringMix:    { label: I18N[currentLang].ringMix, min: 0, max: 1, step: .05, value: .4 },
     tauFix:     { label: I18N[currentLang].tauFix, type: 'check', value: true },
   } },
   { id: 'snorkel', title: I18N[currentLang].secSnorkel, toggle: 'showSnorkel', params: {
@@ -530,7 +533,7 @@ function bakeBg() {
 
 function emit(x, y, r, o) {
   bubbles.push(Object.assign({
-    x, y, r, vx: 0, vy: 0, age: 0, seed: R() * 1000, alpha: 1, kind: 'disc', layer: 'front', phase: R() * 7, tau: P.tau
+    x, y, r, vx: 0, vy: 0, age: 0, seed: R() * 1000, alpha: 1, kind: 'disc', k: 1 - P.ringMix, layer: 'front', phase: R() * 7, tau: P.tau
   }, o))
 }
 
@@ -666,11 +669,20 @@ function step(dt) {
     }
   }
 
-  // 局部密度计算
+  // 局部密度决定画法：挤在一起 → 实心软盘；落单 → 空心线圈。
+  // ringMix 在两种判法之间连续过渡（0 = 旧版，几乎全实心；1 = 前后景严格分开计数、新泡从空心开始）：
+  //   · 新泡的初始实心度 = 1 - ringMix
+  //   · 另一视觉深度的邻居按 (1 - ringMix) 的权重计入
   for (const b of bubbles) {
     let n = 0
+    const crossW = 1 - P.ringMix
     for (const c of bubbles) {
-      if (c !== b && Math.abs(c.x - b.x) < 40 && Math.abs(c.y - b.y) < 40 && Math.hypot(b.x - c.x, b.y - c.y) < (b.r + c.r) * 1.5) n++
+      if (
+        c !== b &&
+        Math.abs(c.x - b.x) < 40 &&
+        Math.abs(c.y - b.y) < 40 &&
+        Math.hypot(b.x - c.x, b.y - c.y) < (b.r + c.r) * 1.5
+      ) n += c.layer === b.layer ? 1 : crossW
     }
     b.k = (b.k ?? 1) + (((n >= P.densN) ? 1 : 0) - (b.k ?? 1)) * Math.min(1, dt * 3)
   }
@@ -1046,7 +1058,7 @@ function copyShareLink() {
   const params = new URLSearchParams()
   params.set('obj', activeObjId)
   params.set('lang', currentLang)
-  const keys = ['terminal','buoy','torque','spreadRate','spreadPow','froth','frothR','ringCount','cloudTau','airTotal','airTau','tauFix','grain']
+  const keys = ['terminal','buoy','torque','spreadRate','spreadPow','froth','frothR','ringCount','cloudTau','airTotal','airTau','tauFix','ringMix','grain']
   for (const k of keys) {
     if (k in P) params.set(k, typeof P[k] === 'boolean' ? (P[k] ? '1' : '0') : P[k])
   }
